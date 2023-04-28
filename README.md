@@ -1,8 +1,8 @@
 # Palette Generator
 
 yet another NES palette generator, in Python
-![complete NES palette](docs\palette.png)
-![waveform preview](docs\waveform.png)
+![complete NES palette](docs/palette.png)
+![waveform preview](docs/waveform.png)
 
 ## Requirements
 
