@@ -18,10 +18,8 @@
 
 
 import argparse
-import sys
 import os
 import numpy as np
-import colour
 import matplotlib.pyplot as plt
 
 
@@ -61,6 +59,23 @@ signal_black_point = lidnariq_NESCPU07_2C02G_NES001_signal[1, 1, 0]
 signal_white_point = lidnariq_NESCPU07_2C02G_NES001_signal[3, 0, 0]
 amplification_factor = 1/(signal_white_point - signal_black_point)
 
+# B-Y and R-Y reduction factors
+BY_rf = 1/2.03
+RY_rf = 1/1.14
+
+# derived from the NTSC base matrix of luminance and color-difference
+RGB_to_YUV = np.array([
+    [ 0.299,        0.587,        0.114],
+    [-0.299*BY_rf, -0.587*BY_rf,  0.886*BY_rf],
+    [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
+], np.float64)
+
+# convert signal RGB to XYZ
+RGB_to_XYZ = np.empty([3, 3], np.float64)
+
+# convert XYZ to display RGB
+RGB_to_XYZ = np.empty([3, 3], np.float64)
+
 # 111111------
 # 22222------2
 # 3333------33
@@ -76,23 +91,36 @@ amplification_factor = 1/(signal_white_point - signal_black_point)
 # signal buffer for decoding
 voltage_buffer = np.empty([12], np.float64)
 
-# final 24-bit RGB palette
-PaletteColors = np.empty([8,4,16,3], np.uint8)
-
 # decoded YUV buffer,
 YUV_buffer = np.empty([8,4,16,3], np.float64)
 
 # decoded RGB buffer
 RGB_buffer = np.empty([8,4,16,3], np.float64)
 
+# final 24-bit RGB palette
+PaletteColors = np.empty([8,4,16,3], np.uint8)
+
+# settings
+settings_brightness = 0
+
+settings_contrast = 0
+
+# hue adjust, in degrees
+settings_hue = 0
+
+settings_saturation = 0
+
+# differential phase distortion, in degrees
+settings_phase_skew = 5
+
 # fix issue with colors
 offset = 2
 emphasis_offset = 1
-colorburst = 8
-colorburst_offset = colorburst - 7
+colorburst_phase = 8
+colorburst_offset = colorburst_phase - 7
 
 for emphasis in range(8):
-    # emphasis bitmask
+    # emphasis bitmask, travelling from lsb to msb
     emphasis_wave = 0
     if bool(emphasis & 0b001):		# tint R; aligned to color phase C
         emphasis_wave |= 0b000001111110;
@@ -122,31 +150,52 @@ for emphasis in range(8):
                 else:
                     voltage_buffer[(wave_phase - hue + offset) % 12] = lidnariq_NESCPU07_2C02G_NES001_signal[luma, n_wave_level, emphasis_level]
             
+            if (args.debug):
+                print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
+            if (args.verbose):
+                plt.title("${0:02X} emphasis pattern {1:012b}".format((luma<<4 | hue), emphasis_wave))
+                x = np.arange(0,12)
+                y = voltage_buffer
+                plt.xlabel("Sample count")
+                plt.ylabel("Voltage")
+                plt.step(x, y, linewidth=0.7)
+                plt.tight_layout()
+                plt.draw()
+                plt.show()
+            
             # normalize voltage
             voltage_buffer -= signal_black_point
             voltage_buffer *= amplification_factor
             
             # decode voltage buffer to YUV
+            UV_buffer = np.empty([12], np.float64)
+            # decode Y
             YUV_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer)
             
-            UV_buffer = np.empty([12], np.float64)
-            
+            # decode U
             for t in range(12):
-                UV_buffer[t] = voltage_buffer[t] * np.sin(2*np.pi*(1/12)*(t+colorburst_offset))
+                UV_buffer[t] = voltage_buffer[t] * np.sin(
+                    2 * np.pi * (1 / 12) * (t + colorburst_offset) +
+                    np.radians(settings_hue) -
+                    np.radians(settings_phase_skew * luma)
+                    )
             YUV_buffer[emphasis, luma, hue, 1] = np.average(UV_buffer)
             
+            # decode V
             for t in range(12):
-                UV_buffer[t] = voltage_buffer[t] * np.cos(2*np.pi*(1/12)*(t+colorburst_offset))
+                UV_buffer[t] = voltage_buffer[t] * np.cos(
+                    2 * np.pi * (1 / 12) * (t + colorburst_offset) +
+                    np.radians(settings_hue) -
+                    np.radians(settings_phase_skew * luma)
+                    )
             YUV_buffer[emphasis, luma, hue, 2] = np.average(UV_buffer)
 
-
             # decode YUV to RGB
-            # derived from the NTSC base matrix of luminance and color-difference
-            RGB_buffer[emphasis, luma, hue, 0] = YUV_buffer[emphasis, luma, hue, 0] + YUV_buffer[emphasis, luma, hue, 2]*1.14
-            RGB_buffer[emphasis, luma, hue, 1] = YUV_buffer[emphasis, luma, hue, 0] - YUV_buffer[emphasis, luma, hue, 1]*0.394242 - YUV_buffer[emphasis, luma, hue, 2]*0.580681
-            RGB_buffer[emphasis, luma, hue, 2] = YUV_buffer[emphasis, luma, hue, 0] + YUV_buffer[emphasis, luma, hue, 1]*2.03
+            RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), YUV_buffer[emphasis, luma, hue])
             
-            # clip RGB to 0.0-1.0
+            
+            # normalize RGB to 0.0-1.0
+            # TODO: different clipping methods
             for i in range(3):
                 RGB_buffer[emphasis, luma, hue, i] = max(0, min(1, 
                     RGB_buffer[emphasis, luma, hue, i]))
@@ -154,39 +203,25 @@ for emphasis in range(8):
             # convert RGB to display output
             # TODO: color primaries transform from one profile to another
             PaletteColors[emphasis, luma, hue] = RGB_buffer[emphasis, luma, hue] * 0xFF
-            
-            if (args.debug):
-                print("{0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
-            if (args.verbose):
-                plt.title("{0:02X} emphasis pattern {1:012b}".format((luma<<4 | hue), emphasis_wave))
-                x = np.arange(0,12)
-                y = voltage_buffer
-
-                plt.xlabel("Sample count")
-                plt.ylabel("Voltage")
-                plt.step(x, y, linewidth=0.7)
-                plt.tight_layout()
-                plt.draw()
-                plt.show()
 
     if not (args.emphasis):
         print("emphasis skipped")
         break
 
-# crop non-emphasis colors if not enabled
 if (args.emphasis):
-    PaletteColorsFinal = np.reshape(PaletteColors,(32, 16, 3))
+    PaletteColorsOut = np.reshape(PaletteColors,(32, 16, 3))
 else:
-    PaletteColorsFinal = PaletteColors[0]
+    # crop non-emphasis colors if not enabled
+    PaletteColorsOut = PaletteColors[0]
 
 if (type(args.output) != type(None)):
     with open(args.output, mode="wb") as PaletteFile:
-        PaletteFile.write(PaletteColorsFinal)
+        PaletteFile.write(PaletteColorsOut)
 
 # figure plotting for palette preview
 # TODO: add more graphs, including CIE graph
 plt.title("palette")
-plt.imshow(PaletteColorsFinal)
+plt.imshow(PaletteColorsOut)
 plt.tight_layout()
 plt.draw()
 plt.show()
