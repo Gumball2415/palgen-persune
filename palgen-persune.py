@@ -22,20 +22,10 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 
-
-parser=argparse.ArgumentParser(
-    description="yet another NES palette generator",
-    epilog="version 0.0.0")
-parser.add_argument("-o", "--output", type=str, help=".pal file output")
-parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
-parser.add_argument("-v", "--verbose", action="store_true", help="look at waveforms")
-parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
-
-args = parser.parse_args()
-
 # voltage highs and lows
+# from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
 # signal[4][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
-lidnariq_NESCPU07_2C02G_NES001_signal = np.array([
+signal_table = np.array([
     [
         [ 0.616, 0.500 ],
         [ 0.228, 0.192 ]
@@ -55,8 +45,8 @@ lidnariq_NESCPU07_2C02G_NES001_signal = np.array([
 ], np.float64)
 
 # signal buffer normalization
-signal_black_point = lidnariq_NESCPU07_2C02G_NES001_signal[1, 1, 0]
-signal_white_point = lidnariq_NESCPU07_2C02G_NES001_signal[3, 0, 0]
+signal_black_point = signal_table[1, 1, 0]
+signal_white_point = signal_table[3, 0, 0]
 amplification_factor = 1/(signal_white_point - signal_black_point)
 
 # B-Y and R-Y reduction factors
@@ -100,24 +90,48 @@ RGB_buffer = np.empty([8,4,16,3], np.float64)
 # final 24-bit RGB palette
 PaletteColors = np.empty([8,4,16,3], np.uint8)
 
-# settings
-settings_brightness = 0
-
-settings_contrast = 0
-
-# hue adjust, in degrees
-settings_hue = 0
-
-settings_saturation = 0
-
-# differential phase distortion, in degrees
-settings_phase_skew = 5
-
 # fix issue with colors
 offset = 2
 emphasis_offset = 1
 colorburst_phase = 8
 colorburst_offset = colorburst_phase - 7
+
+parser=argparse.ArgumentParser(
+    description="yet another NES palette generator",
+    epilog="version 0.0.1")
+parser.add_argument("-o", "--output", type=str, help=".pal file output")
+parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
+parser.add_argument("-v", "--verbose", action="store_true", help="look at waveforms")
+parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
+
+parser.add_argument(
+    "--brightness",
+    type = np.float64,
+    help = "brightness, -1.0 to 1.0",
+    default = 0.0)
+parser.add_argument(
+    "--contrast",
+    type = np.float64,
+    help = "contrast, 0.0 to 1.0",
+    default = 0.0)
+
+parser.add_argument(
+    "--hue",
+    type = np.float64,
+    help = "hue angle, in degrees",
+    default = -15.0)
+parser.add_argument(
+    "--saturation",
+    type = np.float64,
+    help ="saturation, -1.0 to 1.0",
+    default = 0)
+parser.add_argument(
+    "--phase-skew",
+    type = np.float64,
+    help = "differential phase distortion, in degrees",
+    default = -5.0)
+
+args = parser.parse_args()
 
 for emphasis in range(8):
     # emphasis bitmask, travelling from lsb to msb
@@ -146,9 +160,11 @@ for emphasis in range(8):
                 
                 #rows $xE-$xF
                 if (hue >= 0x0E):
-                    voltage_buffer[wave_phase] = lidnariq_NESCPU07_2C02G_NES001_signal[1, 1, 0]
+                    voltage_buffer[wave_phase] = signal_table[1, 1, 0]
                 else:
-                    voltage_buffer[(wave_phase - hue + offset) % 12] = lidnariq_NESCPU07_2C02G_NES001_signal[luma, n_wave_level, emphasis_level]
+                    voltage_buffer[(wave_phase - hue + offset) % 12] = signal_table[luma, n_wave_level, emphasis_level]
+            
+            # TODO: filter voltage buffer
             
             if (args.debug):
                 print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
@@ -176,23 +192,25 @@ for emphasis in range(8):
             for t in range(12):
                 UV_buffer[t] = voltage_buffer[t] * np.sin(
                     2 * np.pi * (1 / 12) * (t + colorburst_offset) +
-                    np.radians(settings_hue) -
-                    np.radians(settings_phase_skew * luma)
+                    np.radians(args.hue) -
+                    np.radians(args.phase_skew * luma)
                     )
-            YUV_buffer[emphasis, luma, hue, 1] = np.average(UV_buffer)
+            YUV_buffer[emphasis, luma, hue, 1] = np.average(UV_buffer) * (args.saturation + 1)
             
             # decode V
             for t in range(12):
                 UV_buffer[t] = voltage_buffer[t] * np.cos(
                     2 * np.pi * (1 / 12) * (t + colorburst_offset) +
-                    np.radians(settings_hue) -
-                    np.radians(settings_phase_skew * luma)
+                    np.radians(args.hue) -
+                    np.radians(args.phase_skew * luma)
                     )
-            YUV_buffer[emphasis, luma, hue, 2] = np.average(UV_buffer)
+            YUV_buffer[emphasis, luma, hue, 2] = np.average(UV_buffer) * (args.saturation + 1)
 
             # decode YUV to RGB
             RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), YUV_buffer[emphasis, luma, hue])
-            
+
+            # apply brightness and contrast
+            RGB_buffer[emphasis, luma, hue] = (RGB_buffer[emphasis, luma, hue] + args.brightness) * (args.contrast + 1)
             
             # normalize RGB to 0.0-1.0
             # TODO: different clipping methods
@@ -220,6 +238,7 @@ if (type(args.output) != type(None)):
 
 # figure plotting for palette preview
 # TODO: add more graphs, including CIE graph
+# TODO: interactivity
 plt.title("palette")
 plt.imshow(PaletteColorsOut)
 plt.tight_layout()
