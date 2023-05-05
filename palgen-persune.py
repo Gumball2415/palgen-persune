@@ -45,8 +45,8 @@ signal_table = np.array([
 ], np.float64)
 
 # signal buffer normalization
-signal_black_point = signal_table[1, 1, 0]
-signal_white_point = signal_table[3, 0, 0]
+signal_black_point = signal_table[1, 1, 0] + 7.5/140
+signal_white_point = signal_table[1, 1, 0] + 100/140
 amplification_factor = 1/(signal_white_point - signal_black_point)
 
 # B-Y and R-Y reduction factors
@@ -130,6 +130,10 @@ parser.add_argument(
     type = np.float64,
     help = "differential phase distortion, in degrees",
     default = -5.0)
+parser.add_argument(
+    "--white-ire",
+    type = np.float64,
+    help = "differential phase distortion, in degrees",)
 
 args = parser.parse_args()
 
@@ -169,7 +173,7 @@ for emphasis in range(8):
             if (args.debug):
                 print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
             if (args.verbose):
-                plt.title("${0:02X} emphasis pattern {1:012b}".format((luma<<4 | hue), emphasis_wave))
+                plt.title("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
                 x = np.arange(0,12)
                 y = voltage_buffer
                 plt.xlabel("Sample count")
