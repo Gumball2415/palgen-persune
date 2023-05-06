@@ -44,11 +44,6 @@ signal_table = np.array([
     ]
 ], np.float64)
 
-# signal buffer normalization
-signal_black_point = signal_table[1, 1, 0] + 7.5/140
-signal_white_point = signal_table[1, 1, 0] + 100/140
-amplification_factor = 1/(signal_white_point - signal_black_point)
-
 # B-Y and R-Y reduction factors
 BY_rf = 1/2.03
 RY_rf = 1/1.14
@@ -98,11 +93,12 @@ colorburst_offset = colorburst_phase - 7
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.0.1")
+    epilog="version 0.0.2")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-v", "--verbose", action="store_true", help="look at waveforms")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
+parser.add_argument("-n", "--normalize", action="store_true", help="normalize white point and black point within range of voltages")
 
 parser.add_argument(
     "--brightness",
@@ -129,13 +125,29 @@ parser.add_argument(
     "--phase-skew",
     type = np.float64,
     help = "differential phase distortion, in degrees",
-    default = -5.0)
+    default = 0)
 parser.add_argument(
-    "--white-ire",
+    "--black-point",
     type = np.float64,
-    help = "differential phase distortion, in degrees",)
+    help = "black point, in voltage units relative to blanking",
+    default =  7.5/140)
+parser.add_argument(
+    "--white-point",
+    type = np.float64,
+    help = "white point, in voltage units relative to blanking",
+    default = 100/140)
 
 args = parser.parse_args()
+
+# signal buffer normalization
+if args.normalize:
+    signal_black_point = signal_table[1, 1, 0]
+    signal_white_point = signal_table[3, 0, 0]
+else:
+    signal_black_point = signal_table[1, 1, 0] + args.black_point
+    signal_white_point = signal_table[1, 1, 0] + args.white_point
+
+amplification_factor = 1/(signal_white_point - signal_black_point)
 
 for emphasis in range(8):
     # emphasis bitmask, travelling from lsb to msb
@@ -157,19 +169,23 @@ for emphasis in range(8):
                 emphasis_level = int(bool(emphasis_wave & (1 << ((wave_phase - hue + emphasis_offset) % 12))))
 
                 if (wave_phase >= 6): n_wave_level = 1
-                    
+
                 # rows $x0 amd $xD
                 if (hue == 0x00): n_wave_level = 0
                 if (hue == 0x0D): n_wave_level = 1
-                
+
                 #rows $xE-$xF
                 if (hue >= 0x0E):
                     voltage_buffer[wave_phase] = signal_table[1, 1, 0]
                 else:
                     voltage_buffer[(wave_phase - hue + offset) % 12] = signal_table[luma, n_wave_level, emphasis_level]
-            
-            # TODO: filter voltage buffer
-            
+
+            # TODO: better filter voltage buffer
+            # voltage_buffer = np.fft.fft(voltage_buffer)
+            # kernel = np.array([0, 1, 0.5, 0.5, 0.5, 0.3, 0, 0, 0, 0, 0, 0], np.float64)
+            # voltage_buffer *= kernel
+            # voltage_buffer = np.fft.ifft(voltage_buffer)
+
             if (args.debug):
                 print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
             if (args.verbose):
@@ -182,16 +198,16 @@ for emphasis in range(8):
                 plt.tight_layout()
                 plt.draw()
                 plt.show()
-            
+
             # normalize voltage
             voltage_buffer -= signal_black_point
             voltage_buffer *= amplification_factor
-            
+
             # decode voltage buffer to YUV
             UV_buffer = np.empty([12], np.float64)
             # decode Y
             YUV_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer)
-            
+
             # decode U
             for t in range(12):
                 UV_buffer[t] = voltage_buffer[t] * np.sin(
@@ -200,7 +216,7 @@ for emphasis in range(8):
                     np.radians(args.phase_skew * luma)
                     )
             YUV_buffer[emphasis, luma, hue, 1] = np.average(UV_buffer) * (args.saturation + 1)
-            
+
             # decode V
             for t in range(12):
                 UV_buffer[t] = voltage_buffer[t] * np.cos(
@@ -215,11 +231,11 @@ for emphasis in range(8):
 
             # apply brightness and contrast
             RGB_buffer[emphasis, luma, hue] = (RGB_buffer[emphasis, luma, hue] + args.brightness) * (args.contrast + 1)
-            
+
             # normalize RGB to 0.0-1.0
             # TODO: different clipping methods
             for i in range(3):
-                RGB_buffer[emphasis, luma, hue, i] = max(0, min(1, 
+                RGB_buffer[emphasis, luma, hue, i] = max(0, min(1,
                     RGB_buffer[emphasis, luma, hue, i]))
 
             # convert RGB to display output
