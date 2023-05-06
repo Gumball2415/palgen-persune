@@ -181,8 +181,14 @@ for emphasis in range(8):
                     voltage_buffer[(wave_phase - hue + offset) % 12] = signal_table[luma, n_wave_level, emphasis_level]
 
             # TODO: better filter voltage buffer
+
+            # convolution approach
+            # kernel = np.array([0.25, 0.75, 1, -0.2, -0.05, 0], np.float64)
+            # voltage_buffer = np.delete(np.convolve(voltage_buffer, kernel), [0, 13, 14, 15, 16])
+
+            # fft approach
             # voltage_buffer = np.fft.fft(voltage_buffer)
-            # kernel = np.array([0, 1, 0.5, 0.5, 0.5, 0.3, 0, 0, 0, 0, 0, 0], np.float64)
+            # kernel = np.array([1, 1, 0.5, 0.5, 0.5, 0.3, 0, 0, 0, 0, 0, 0], np.float64)
             # voltage_buffer *= kernel
             # voltage_buffer = np.fft.ifft(voltage_buffer)
 
