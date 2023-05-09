@@ -76,6 +76,8 @@ RGB_to_XYZ = np.empty([3, 3], np.float64)
 # -CCCCCC-----
 # signal buffer for decoding
 voltage_buffer = np.empty([12], np.float64)
+U_buffer = np.empty([12], np.float64)
+V_buffer = np.empty([12], np.float64)
 
 # decoded YUV buffer,
 YUV_buffer = np.empty([8,4,16,3], np.float64)
@@ -84,55 +86,58 @@ YUV_buffer = np.empty([8,4,16,3], np.float64)
 RGB_buffer = np.empty([8,4,16,3], np.float64)
 
 # fix issue with colors
-offset = 2
+offset = 1
 emphasis_offset = 1
 colorburst_phase = 8
-colorburst_offset = colorburst_phase - 7
+
+# due to the way the waveform is encoded, the hue is off by 15 degrees, or 1/2 of a sample
+colorburst_offset = colorburst_phase - 6 - 0.5
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.0.2")
+    epilog="version 0.1.0")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
-parser.add_argument("-v", "--verbose", action="store_true", help="look at waveforms")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
 parser.add_argument("-n", "--normalize", action="store_true", help="normalize white point and black point within range of voltages")
+parser.add_argument("-v", "--visualize-wave", action="store_true", help="visualize composite waveforms")
+parser.add_argument("-p", "--phase-QAM", action="store_true", help="visualize QAM demodulation")
 
 parser.add_argument(
     "--brightness",
     type = np.float64,
-    help = "brightness, -1.0 to 1.0",
+    help = "brightness, -1.0 to 1.0, default = 0.0",
     default = 0.0)
 parser.add_argument(
     "--contrast",
     type = np.float64,
-    help = "contrast, 0.0 to 1.0",
+    help = "contrast, 0.0 to 1.0, default = 0.0",
     default = 0.0)
 
 parser.add_argument(
     "--hue",
     type = np.float64,
-    help = "hue angle, in degrees",
-    default = -15.0)
+    help = "hue angle delta, in degrees, default = 0.0",
+    default = 0)
 parser.add_argument(
     "--saturation",
     type = np.float64,
-    help ="saturation, -1.0 to 1.0",
+    help ="saturation delta, -1.0 to 1.0, default = 0.0",
     default = 0)
 parser.add_argument(
     "--phase-skew",
     type = np.float64,
-    help = "differential phase distortion, in degrees",
+    help = "differential phase distortion, in degrees, default = 0.0",
     default = 0)
 parser.add_argument(
     "--black-point",
     type = np.float64,
-    help = "black point, in voltage units relative to blanking",
+    help = "black point, in voltage units relative to blanking, default = 7.5/140.0",
     default =  7.5/140) # 7.5 IRE
 parser.add_argument(
     "--white-point",
     type = np.float64,
-    help = "white point, in voltage units relative to blanking",
+    help = "white point, in voltage units relative to blanking, default = 100.0/140.0",
     default = 100/140) # 100 IRE
 
 args = parser.parse_args()
@@ -192,13 +197,14 @@ for emphasis in range(8):
 
             if (args.debug):
                 print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
-            if (args.verbose):
+            if (args.visualize_wave):
                 plt.title("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
                 x = np.arange(0,12)
                 y = voltage_buffer
+                plt.axis([0, 12, 0, 1.5])
                 plt.xlabel("Sample count")
                 plt.ylabel("Voltage")
-                plt.step(x, y, linewidth=0.7)
+                plt.plot(x, y, 'o-', linewidth=0.7)
                 plt.tight_layout()
                 plt.draw()
                 plt.show()
@@ -208,27 +214,43 @@ for emphasis in range(8):
             voltage_buffer *= amplification_factor
 
             # decode voltage buffer to YUV
-            UV_buffer = np.empty([12], np.float64)
             # decode Y
             YUV_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer)
 
             # decode U
             for t in range(12):
-                UV_buffer[t] = voltage_buffer[t] * np.sin(
-                    2 * np.pi * (1 / 12) * (t + colorburst_offset) +
+                U_buffer[t] = voltage_buffer[t] * np.sin(
+                    2 * np.pi / 12 * (t + colorburst_offset) +
                     np.radians(args.hue) -
-                    np.radians(args.phase_skew * luma)
-                    )
-            YUV_buffer[emphasis, luma, hue, 1] = np.average(UV_buffer) * (args.saturation + 1)
+                    np.radians(args.phase_skew * luma))
+            YUV_buffer[emphasis, luma, hue, 1] = np.average(U_buffer) * (args.saturation + 1)
 
             # decode V
             for t in range(12):
-                UV_buffer[t] = voltage_buffer[t] * np.cos(
-                    2 * np.pi * (1 / 12) * (t + colorburst_offset) +
+                V_buffer[t] = voltage_buffer[t] * np.cos(
+                    2 * np.pi / 12 * (t + colorburst_offset) +
                     np.radians(args.hue) -
-                    np.radians(args.phase_skew * luma)
-                    )
-            YUV_buffer[emphasis, luma, hue, 2] = np.average(UV_buffer) * (args.saturation + 1)
+                    np.radians(args.phase_skew * luma))
+            YUV_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
+
+            # visualize chroma decoding
+            if (args.phase_QAM):
+                plt.title("QAM demodulating ${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
+                w = voltage_buffer
+                x = np.arange(0,12)
+                plt.xlabel("Sample count")
+                plt.ylabel("value")
+                plt.axis([0, 12, -1, 1])
+                plt.plot(x, voltage_buffer, 'o-', linewidth=0.7, label='normalized signal')
+                plt.plot(x, U_buffer, 'o-', linewidth=0.7, label='demodulated U wave')
+                plt.plot(x, V_buffer, 'o-', linewidth=0.7, label='demodulated V wave')
+                plt.plot(x, np.full((12), np.average(voltage_buffer)), 'o-', linewidth=0.7, label='Y value')
+                plt.plot(x, np.full((12), np.average(U_buffer)), 'o-', linewidth=0.7, label='U value')
+                plt.plot(x, np.full((12), np.average(V_buffer)), 'o-', linewidth=0.7, label='V value')
+                plt.tight_layout()
+                plt.legend(loc='lower right')
+                plt.draw()
+                plt.show()
 
             # decode YUV to RGB
             RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), YUV_buffer[emphasis, luma, hue])
@@ -244,7 +266,7 @@ for emphasis in range(8):
 
             # convert RGB to display output
             # TODO: color primaries transform from one profile to another
-            RGB_buffer[emphasis, luma, hue] = RGB_buffer[emphasis, luma, hue]
+            # RGB_buffer[emphasis, luma, hue] = RGB_buffer[emphasis, luma, hue]
 
     if not (args.emphasis):
         print("emphasis skipped")
@@ -259,6 +281,8 @@ else:
     Palette_colors_out = RGB_buffer[0]
     YUV_buffer_out = YUV_buffer[0]
     luma_range = 4
+
+# display data about the palette, and optionally write a .pal file
 
 if (type(args.output) != type(None)):
     with open(args.output, mode="wb") as Palette_file:

@@ -3,16 +3,17 @@
 yet another NES palette generator, in Python
 ![complete NES palette](docs/palette.png)
 ![waveform preview](docs/waveform.png)
+![QAM demodulation](docs/QAM.png)
 
 ## Requirements
 
-This script requires `numpy` for color decoding.
-This script requires `matplotlib.pyplot` for previewing
+This script requires `numpy` for arrays and matricies used for color calculations.
+This script requires `matplotlib` for graphs.
 
 ## Usage
 ```
-usage: palgen-persune.py [-h] [-o OUTPUT] [-e] [-v] [-d] [--brightness BRIGHTNESS] [--contrast CONTRAST] [--hue HUE] [--saturation SATURATION]
-                         [--phase-skew PHASE_SKEW] [--white-ire WHITE_IRE]
+usage: palgen-persune.py [-h] [-o OUTPUT] [-e] [-d] [-n] [-v] [-p] [--brightness BRIGHTNESS] [--contrast CONTRAST] [--hue HUE] [--saturation SATURATION]
+                         [--phase-skew PHASE_SKEW] [--black-point BLACK_POINT] [--white-point WHITE_POINT]
 
 yet another NES palette generator
 
@@ -21,20 +22,24 @@ options:
   -o OUTPUT, --output OUTPUT
                         .pal file output
   -e, --emphasis        add emphasis entries
-  -v, --verbose         look at waveforms
   -d, --debug           debug messages
+  -n, --normalize       normalize white point and black point within range of voltages
+  -v, --visualize-wave  visualize composite waveforms
+  -p, --phase-QAM       visualize QAM demodulation
   --brightness BRIGHTNESS
-                        brightness, -1.0 to 1.0
-  --contrast CONTRAST   contrast, 0.0 to 1.0
-  --hue HUE             hue angle, in degrees
+                        brightness, -1.0 to 1.0, default = 0.0
+  --contrast CONTRAST   contrast, 0.0 to 1.0, default = 0.0
+  --hue HUE             hue angle delta, in degrees, default = 0.0
   --saturation SATURATION
-                        saturation, -1.0 to 1.0
+                        saturation delta, -1.0 to 1.0, default = 0.0
   --phase-skew PHASE_SKEW
-                        differential phase distortion, in degrees
-  --white-ire WHITE_IRE
-                        differential phase distortion, in degrees
+                        differential phase distortion, in degrees, default = 0.0
+  --black-point BLACK_POINT
+                        black point, in voltage units relative to blanking, default = 7.5/140.0
+  --white-point WHITE_POINT
+                        white point, in voltage units relative to blanking, default = 100.0/140.0
 
-version 0.0.1
+version 0.1.0
 ```
 
 ## License
