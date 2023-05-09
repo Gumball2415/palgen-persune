@@ -21,6 +21,7 @@ import argparse
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 
 # voltage highs and lows
 # from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
@@ -82,9 +83,6 @@ YUV_buffer = np.empty([8,4,16,3], np.float64)
 # decoded RGB buffer
 RGB_buffer = np.empty([8,4,16,3], np.float64)
 
-# final 24-bit RGB palette
-PaletteColors = np.empty([8,4,16,3], np.uint8)
-
 # fix issue with colors
 offset = 2
 emphasis_offset = 1
@@ -130,12 +128,12 @@ parser.add_argument(
     "--black-point",
     type = np.float64,
     help = "black point, in voltage units relative to blanking",
-    default =  7.5/140)
+    default =  7.5/140) # 7.5 IRE
 parser.add_argument(
     "--white-point",
     type = np.float64,
     help = "white point, in voltage units relative to blanking",
-    default = 100/140)
+    default = 100/140) # 100 IRE
 
 args = parser.parse_args()
 
@@ -246,27 +244,53 @@ for emphasis in range(8):
 
             # convert RGB to display output
             # TODO: color primaries transform from one profile to another
-            PaletteColors[emphasis, luma, hue] = RGB_buffer[emphasis, luma, hue] * 0xFF
+            RGB_buffer[emphasis, luma, hue] = RGB_buffer[emphasis, luma, hue]
 
     if not (args.emphasis):
         print("emphasis skipped")
         break
 
 if (args.emphasis):
-    PaletteColorsOut = np.reshape(PaletteColors,(32, 16, 3))
+    Palette_colors_out = np.reshape(RGB_buffer,(32, 16, 3))
+    YUV_buffer_out = np.reshape(YUV_buffer,(32, 16, 3))
+    luma_range = 32
 else:
     # crop non-emphasis colors if not enabled
-    PaletteColorsOut = PaletteColors[0]
+    Palette_colors_out = RGB_buffer[0]
+    YUV_buffer_out = YUV_buffer[0]
+    luma_range = 4
 
 if (type(args.output) != type(None)):
-    with open(args.output, mode="wb") as PaletteFile:
-        PaletteFile.write(PaletteColorsOut)
+    with open(args.output, mode="wb") as Palette_file:
+        Palette_file.write(np.uint8(Palette_colors_out * 0xFF))
+
+color_theta = np.arctan2(YUV_buffer_out[:, :, 2], YUV_buffer_out[:, :, 1])
+color_r = np.sqrt(YUV_buffer_out[:, :, 1]**2 + YUV_buffer_out[:, :, 2]**2)
+
+color_rgb = np.reshape(Palette_colors_out,(luma_range*16, 3))
 
 # figure plotting for palette preview
-# TODO: add more graphs, including CIE graph
 # TODO: interactivity
-plt.title("palette")
-plt.imshow(PaletteColorsOut)
-plt.tight_layout()
-plt.draw()
+
+fig = plt.figure(tight_layout=True)
+gs = gridspec.GridSpec(2, 2)
+
+ax0 = fig.add_subplot(gs[:, 0])
+ax1 = fig.add_subplot(gs[0, 1], projection='polar')
+ax2 = fig.add_subplot(gs[1, 1])
+
+fig.suptitle('NES palette')
+fig.tight_layout()
+# colors
+ax0.set_title("Color swatches")
+ax0.imshow(Palette_colors_out)
+
+# polar plot
+ax1.set_title("Color phase")
+ax1.set_yticklabels([])
+ax1.scatter(color_theta, color_r, c=color_rgb, marker=None, s=color_r*1500)
+
+# CIE graph
+ax2.set_title("CIE graph (todo)")
+
 plt.show()
