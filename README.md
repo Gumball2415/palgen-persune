@@ -8,6 +8,7 @@ yet another NES palette generator, in Python
 ## Requirements
 
 This script requires `numpy` for arrays and matricies used for color calculations.
+
 This script requires `matplotlib` for graphs.
 
 ## Usage
@@ -45,6 +46,7 @@ version 0.1.1
 ## License
 
 This work is licensed under the MIT-0 license.
+
 Copyright (C) Persune 2023.
 
 ## Credits
@@ -54,4 +56,5 @@ Special thanks to:
 - lidnariq
 - NewRisingSun
 - jekuthiel
+
 This would have not been possible without their help!
