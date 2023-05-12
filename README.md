@@ -1,9 +1,9 @@
 # Palette Generator
 
 yet another NES palette generator, in Python
-![complete NES palette](docs/palette.png)
-![waveform preview](docs/waveform sequence.gif)
-![QAM demodulation](docs/QAM sequence.gif)
+<img src="docs/palette.png">
+<img src="docs/waveform sequence.gif">
+<img src="docs/QAM sequence.gif">
 
 ## Requirements
 
