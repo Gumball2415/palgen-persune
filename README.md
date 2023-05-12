@@ -2,8 +2,8 @@
 
 yet another NES palette generator, in Python
 ![complete NES palette](docs/palette.png)
-![waveform preview](docs/waveform.png)
-![QAM demodulation](docs/QAM.png)
+![waveform preview](docs/waveform sequence.gif)
+![QAM demodulation](docs/QAM sequence.gif)
 
 ## Requirements
 
@@ -24,8 +24,8 @@ options:
   -e, --emphasis        add emphasis entries
   -d, --debug           debug messages
   -n, --normalize       normalize white point and black point within range of voltages
-  -v, --visualize-wave  visualize composite waveforms
-  -p, --phase-QAM       visualize QAM demodulation
+  -v, --visualize-wave  render composite waveforms as .png in docs folder
+  -p, --phase-QAM       render QAM demodulation as .png in docs folder
   --brightness BRIGHTNESS
                         brightness, -1.0 to 1.0, default = 0.0
   --contrast CONTRAST   contrast, 0.0 to 1.0, default = 0.0
@@ -39,10 +39,19 @@ options:
   --white-point WHITE_POINT
                         white point, in voltage units relative to blanking, default = 100.0/140.0
 
-version 0.1.0
+version 0.1.1
 ```
 
 ## License
 
 This work is licensed under the MIT-0 license.
 Copyright (C) Persune 2023.
+
+## Credits
+
+Special thanks to:
+- _aitchFactor
+- lidnariq
+- NewRisingSun
+- jekuthiel
+This would have not been possible without their help!

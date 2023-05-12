@@ -93,15 +93,17 @@ colorburst_phase = 8
 # due to the way the waveform is encoded, the hue is off by 15 degrees, or 1/2 of a sample
 colorburst_offset = colorburst_phase - 6 - 0.5
 
+# plt.style.use('dark_background')
+
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.1.0")
+    epilog="version 0.1.1")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
 parser.add_argument("-n", "--normalize", action="store_true", help="normalize white point and black point within range of voltages")
-parser.add_argument("-v", "--visualize-wave", action="store_true", help="visualize composite waveforms")
-parser.add_argument("-p", "--phase-QAM", action="store_true", help="visualize QAM demodulation")
+parser.add_argument("-v", "--visualize-wave", action="store_true", help="render composite waveforms as .png in docs folder")
+parser.add_argument("-p", "--phase-QAM", action="store_true", help="render QAM demodulation as .png in docs folder")
 
 parser.add_argument(
     "--brightness",
@@ -152,6 +154,9 @@ else:
 
 amplification_factor = 1/(signal_white_point - signal_black_point)
 
+# used for image sequence plotting
+sequence_counter = 0
+
 for emphasis in range(8):
     # emphasis bitmask, travelling from lsb to msb
     emphasis_wave = 0
@@ -198,16 +203,19 @@ for emphasis in range(8):
             if (args.debug):
                 print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
             if (args.visualize_wave):
-                plt.title("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
+                fig = plt.figure(tight_layout=True)
+                fig.suptitle("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
+                ax = fig.subplots()
                 x = np.arange(0,12)
                 y = voltage_buffer
-                plt.axis([0, 12, 0, 1.5])
-                plt.xlabel("Sample count")
-                plt.ylabel("Voltage")
-                plt.plot(x, y, 'o-', linewidth=0.7)
-                plt.tight_layout()
-                plt.draw()
-                plt.show()
+                ax.axis([0, 12, 0, 1.5])
+                ax.set_xlabel("Sample count")
+                ax.set_ylabel("Voltage")
+                ax.plot(x, y, 'o-', linewidth=0.7)
+                
+                fig.set_size_inches(16, 9)
+                plt.savefig("docs/waveform sequence {0:03}.png".format(sequence_counter), dpi=120)
+                plt.close()
 
             # normalize voltage
             voltage_buffer -= signal_black_point
@@ -233,24 +241,6 @@ for emphasis in range(8):
                     np.radians(args.phase_skew * luma))
             YUV_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
 
-            # visualize chroma decoding
-            if (args.phase_QAM):
-                plt.title("QAM demodulating ${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
-                w = voltage_buffer
-                x = np.arange(0,12)
-                plt.xlabel("Sample count")
-                plt.ylabel("value")
-                plt.axis([0, 12, -1, 1])
-                plt.plot(x, voltage_buffer, 'o-', linewidth=0.7, label='normalized signal')
-                plt.plot(x, U_buffer, 'o-', linewidth=0.7, label='demodulated U wave')
-                plt.plot(x, V_buffer, 'o-', linewidth=0.7, label='demodulated V wave')
-                plt.plot(x, np.full((12), np.average(voltage_buffer)), 'o-', linewidth=0.7, label='Y value')
-                plt.plot(x, np.full((12), np.average(U_buffer)), 'o-', linewidth=0.7, label='U value')
-                plt.plot(x, np.full((12), np.average(V_buffer)), 'o-', linewidth=0.7, label='V value')
-                plt.tight_layout()
-                plt.legend(loc='lower right')
-                plt.draw()
-                plt.show()
 
             # decode YUV to RGB
             RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), YUV_buffer[emphasis, luma, hue])
@@ -264,23 +254,79 @@ for emphasis in range(8):
                 RGB_buffer[emphasis, luma, hue, i] = max(0, min(1,
                     RGB_buffer[emphasis, luma, hue, i]))
 
+            # visualize chroma decoding
+            if (args.phase_QAM):
+                fig = plt.figure(tight_layout=True)
+                gs = gridspec.GridSpec(3, 2)
+
+                axY = fig.add_subplot(gs[0,0])
+                axU = fig.add_subplot(gs[1,0])
+                axV = fig.add_subplot(gs[2,0])
+                ax1 = fig.add_subplot(gs[:,1], projection='polar')
+                fig.suptitle("QAM demodulating ${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
+                w = voltage_buffer
+                x = np.arange(0,12)
+                Y_avg = np.average(voltage_buffer)
+                U_avg = np.average(U_buffer)
+                V_avg = np.average(V_buffer)
+                
+                range_axis = (signal_white_point * amplification_factor) - signal_black_point
+                axY.set_title("Y decoding")
+                axY.set_ylabel("value")
+                axY.axis([0, 12, -1*range_axis, range_axis])
+                axY.plot(x, voltage_buffer, 'o-', linewidth=0.7, label='normalized signal')
+                axY.plot(x, np.full((12), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format(Y_avg))
+                axY.legend(loc='lower right')
+                
+                axU.set_title("U decoding")
+                axU.set_ylabel("value")
+                axU.axis([0, 12, -1*range_axis, range_axis])
+                axU.plot(x, U_buffer, 'o-', linewidth=0.7, label='demodulated U signal')
+                axU.plot(x, np.full((12), U_avg), 'o-', linewidth=0.7, label='U value = {:< z.3f}'.format(U_avg))
+                axU.legend(loc='lower right')
+                
+                axV.set_title("V decoding")
+                axV.set_ylabel("value")
+                axV.axis([0, 12, -1*range_axis, range_axis])
+                axV.plot(x, V_buffer, 'o-', linewidth=0.7, label='demodulated V signal')
+                axV.plot(x, np.full((12), V_avg), 'o-', linewidth=0.7, label='V value = {:< z.3f}'.format(V_avg))
+                axV.legend(loc='lower right')
+                
+                color_theta = np.arctan2(V_avg, U_avg)
+                color_r =  np.sqrt(U_avg**2 + V_avg**2)
+                ax1.axis([0, 2*np.pi, 0, 0.3])
+                ax1.set_title("Phasor plot")
+                # ax1.set_yticklabels([])
+                ax1.scatter(color_theta, color_r)
+                ax1.vlines(color_theta, 0, color_r, colors=RGB_buffer[emphasis, luma, hue])
+                
+                fig.set_size_inches(16, 9)
+                # plt.show()
+                plt.savefig("docs/QAM sequence {0:03}.png".format(sequence_counter), dpi=120)
+                plt.close()
             # convert RGB to display output
             # TODO: color primaries transform from one profile to another
             # RGB_buffer[emphasis, luma, hue] = RGB_buffer[emphasis, luma, hue]
 
+            sequence_counter += 1
     if not (args.emphasis):
         print("emphasis skipped")
         break
 
 if (args.emphasis):
     Palette_colors_out = np.reshape(RGB_buffer,(32, 16, 3))
-    YUV_buffer_out = np.reshape(YUV_buffer,(32, 16, 3))
+    #YUV_buffer_out = np.reshape(YUV_buffer,(32, 16, 3))
     luma_range = 32
 else:
     # crop non-emphasis colors if not enabled
     Palette_colors_out = RGB_buffer[0]
-    YUV_buffer_out = YUV_buffer[0]
+    #YUV_buffer_out = YUV_buffer[0]
     luma_range = 4
+
+YUV_buffer_out = np.empty([luma_range, 16, 3], np.float64)
+for luma in range(luma_range):
+    for hue in range(16):
+        YUV_buffer_out[luma, hue] = np.matmul(RGB_to_YUV, Palette_colors_out[luma, hue])
 
 # display data about the palette, and optionally write a .pal file
 
@@ -289,7 +335,7 @@ if (type(args.output) != type(None)):
         Palette_file.write(np.uint8(Palette_colors_out * 0xFF))
 
 color_theta = np.arctan2(YUV_buffer_out[:, :, 2], YUV_buffer_out[:, :, 1])
-color_r = np.sqrt(YUV_buffer_out[:, :, 1]**2 + YUV_buffer_out[:, :, 2]**2)
+color_r = YUV_buffer_out[:, :, 0]
 
 color_rgb = np.reshape(Palette_colors_out,(luma_range*16, 3))
 
@@ -310,11 +356,12 @@ ax0.set_title("Color swatches")
 ax0.imshow(Palette_colors_out)
 
 # polar plot
-ax1.set_title("Color phase")
+ax1.set_title("RGB color phase")
 ax1.set_yticklabels([])
-ax1.scatter(color_theta, color_r, c=color_rgb, marker=None, s=color_r*1500)
+ax1.scatter(color_theta, color_r, c=color_rgb, marker=None, s=color_r*500, zorder=3)
 
 # CIE graph
 ax2.set_title("CIE graph (todo)")
 
+fig.set_size_inches(16, 9)
 plt.show()
