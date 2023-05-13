@@ -22,6 +22,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import colour.models
 
 # voltage highs and lows
 # from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
@@ -56,11 +57,21 @@ RGB_to_YUV = np.array([
     [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
 ], np.float64)
 
-# convert signal RGB to XYZ
-RGB_to_XYZ = np.empty([3, 3], np.float64)
+# reference color profile, in CIE xy chromaticities
+reference_profile = np.array([
+    [0.670, 0.330],     # red
+    [0.210, 0.710],     # green
+    [0.140, 0.080],     # blue
+    [0.313, 0.329]      # white point
+], np.float64)
 
-# convert XYZ to display RGB
-RGB_to_XYZ = np.empty([3, 3], np.float64)
+# display color profile, in CIE xy chromaticities
+display_profile = np.array([
+    [0.670, 0.330],     # red
+    [0.210, 0.710],     # green
+    [0.140, 0.080],     # blue
+    [0.313, 0.329]      # white point
+], np.float64)
 
 # 111111------
 # 22222------2
@@ -75,15 +86,15 @@ RGB_to_XYZ = np.empty([3, 3], np.float64)
 # --BBBBBB----
 # -CCCCCC-----
 # signal buffer for decoding
-voltage_buffer = np.empty([12], np.float64)
-U_buffer = np.empty([12], np.float64)
-V_buffer = np.empty([12], np.float64)
+voltage_buffer = np.zeros([12], np.float64)
+U_buffer = np.zeros([12], np.float64)
+V_buffer = np.zeros([12], np.float64)
 
 # decoded YUV buffer,
-YUV_buffer = np.empty([8,4,16,3], np.float64)
+YUV_buffer = np.zeros([8,4,16,3], np.float64)
 
 # decoded RGB buffer
-RGB_buffer = np.empty([8,4,16,3], np.float64)
+RGB_buffer = np.zeros([8,4,16,3], np.float64)
 
 # fix issue with colors
 offset = 1
@@ -101,7 +112,8 @@ parser=argparse.ArgumentParser(
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
-parser.add_argument("-n", "--normalize", action="store_true", help="normalize white point and black point within range of voltages")
+parser.add_argument("-n", "--normalize", action="store_true", help="normalize colors within range of RGB")
+parser.add_argument("-s", "--scale", action="store_true", help="scale RGB values")
 parser.add_argument("-v", "--visualize-wave", action="store_true", help="render composite waveforms as .png in docs folder")
 parser.add_argument("-p", "--phase-QAM", action="store_true", help="render QAM demodulation as .png in docs folder")
 
@@ -141,17 +153,18 @@ parser.add_argument(
     type = np.float64,
     help = "white point, in voltage units relative to blanking, default = 100.0/140.0",
     default = 100/140) # 100 IRE
+    
+# parser.add_argument(
+    # "--white-point",
+    # type = np.float64,
+    # help = "white point, in voltage units relative to blanking, default = 100.0/140.0",
+    # default = "")
 
 args = parser.parse_args()
 
 # signal buffer normalization
-if args.normalize:
-    signal_black_point = signal_table[1, 1, 0]
-    signal_white_point = signal_table[3, 0, 0]
-else:
-    signal_black_point = signal_table[1, 1, 0] + args.black_point
-    signal_white_point = signal_table[1, 1, 0] + args.white_point
-
+signal_black_point = signal_table[1, 1, 0] + args.black_point
+signal_white_point = signal_table[1, 1, 0] + args.white_point
 amplification_factor = 1/(signal_white_point - signal_black_point)
 
 # used for image sequence plotting
@@ -248,12 +261,6 @@ for emphasis in range(8):
             # apply brightness and contrast
             RGB_buffer[emphasis, luma, hue] = (RGB_buffer[emphasis, luma, hue] + args.brightness) * (args.contrast + 1)
 
-            # normalize RGB to 0.0-1.0
-            # TODO: different clipping methods
-            for i in range(3):
-                RGB_buffer[emphasis, luma, hue, i] = max(0, min(1,
-                    RGB_buffer[emphasis, luma, hue, i]))
-
             # visualize chroma decoding
             if (args.phase_QAM):
                 fig = plt.figure(tight_layout=True)
@@ -298,70 +305,77 @@ for emphasis in range(8):
                 ax1.set_title("Phasor plot")
                 # ax1.set_yticklabels([])
                 ax1.scatter(color_theta, color_r)
-                ax1.vlines(color_theta, 0, color_r, colors=RGB_buffer[emphasis, luma, hue])
+                ax1.vlines(color_theta, 0, color_r)
                 
                 fig.set_size_inches(16, 9)
                 # plt.show()
                 plt.savefig("docs/QAM sequence {0:03}.png".format(sequence_counter), dpi=120)
                 plt.close()
-            # convert RGB to display output
-            # TODO: color primaries transform from one profile to another
-            # RGB_buffer[emphasis, luma, hue] = RGB_buffer[emphasis, luma, hue]
 
             sequence_counter += 1
+    # normalize RGB to 0.0-1.0
+    # TODO: different clipping methods
+    if args.normalize:
+        RGB_buffer[emphasis] -= np.amin(RGB_buffer[emphasis])
+        RGB_buffer[emphasis] /= (np.amax(RGB_buffer[emphasis]) - np.amin(RGB_buffer[emphasis]))
+    else:
+        np.clip(RGB_buffer[emphasis], 0, 1, out=RGB_buffer[emphasis])
+    color_theta = np.arctan2(YUV_buffer[emphasis, :, :, 2], YUV_buffer[emphasis, :, :, 1])
+    color_r = YUV_buffer[emphasis, :, :, 0]
+    
+    Palette_colors_out = RGB_buffer[emphasis]
+
+    # figure plotting for palette preview
+    # TODO: interactivity
+
+    fig = plt.figure(tight_layout=True)
+    gs = gridspec.GridSpec(2, 2)
+
+    ax0 = fig.add_subplot(gs[:, 0])
+    ax1 = fig.add_subplot(gs[0, 1], projection='polar')
+    ax2 = fig.add_subplot(gs[1, 1])
+
+    fig.suptitle('NES palette (emphasis = {:03b})'.format(emphasis))
+    fig.tight_layout()
+    # colors
+    ax0.set_title("Color swatches")
+    ax0.imshow(RGB_buffer[emphasis])
+
+    # polar plot
+    ax1.set_title("RGB color phase")
+    ax1.set_yticklabels([])
+    ax1.axis([0, 2*np.pi, 0, 1])
+    ax1.scatter(color_theta, color_r, c=np.reshape(RGB_buffer[emphasis],(4*16, 3)), marker=None, s=color_r*500, zorder=3)
+
+    # CIE graph
+    ax2.set_title("CIE graph (todo)")
+
+    fig.set_size_inches(16, 9)
+    plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120)
+    # plt.show()
     if not (args.emphasis):
         print("emphasis skipped")
         break
 
+# convert RGB to display output
+
+# convert signal to linear light
+RGB_buffer = colour.models.oetf_inverse_BT709(RGB_buffer)
+
+# transform linear light
+
+# convert linear light to signal
+RGB_buffer = colour.models.oetf_BT709(RGB_buffer)
+
+
 if (args.emphasis):
     Palette_colors_out = np.reshape(RGB_buffer,(32, 16, 3))
-    #YUV_buffer_out = np.reshape(YUV_buffer,(32, 16, 3))
-    luma_range = 32
 else:
     # crop non-emphasis colors if not enabled
     Palette_colors_out = RGB_buffer[0]
-    #YUV_buffer_out = YUV_buffer[0]
-    luma_range = 4
-
-YUV_buffer_out = np.empty([luma_range, 16, 3], np.float64)
-for luma in range(luma_range):
-    for hue in range(16):
-        YUV_buffer_out[luma, hue] = np.matmul(RGB_to_YUV, Palette_colors_out[luma, hue])
 
 # display data about the palette, and optionally write a .pal file
 
 if (type(args.output) != type(None)):
     with open(args.output, mode="wb") as Palette_file:
         Palette_file.write(np.uint8(Palette_colors_out * 0xFF))
-
-color_theta = np.arctan2(YUV_buffer_out[:, :, 2], YUV_buffer_out[:, :, 1])
-color_r = YUV_buffer_out[:, :, 0]
-
-color_rgb = np.reshape(Palette_colors_out,(luma_range*16, 3))
-
-# figure plotting for palette preview
-# TODO: interactivity
-
-fig = plt.figure(tight_layout=True)
-gs = gridspec.GridSpec(2, 2)
-
-ax0 = fig.add_subplot(gs[:, 0])
-ax1 = fig.add_subplot(gs[0, 1], projection='polar')
-ax2 = fig.add_subplot(gs[1, 1])
-
-fig.suptitle('NES palette')
-fig.tight_layout()
-# colors
-ax0.set_title("Color swatches")
-ax0.imshow(Palette_colors_out)
-
-# polar plot
-ax1.set_title("RGB color phase")
-ax1.set_yticklabels([])
-ax1.scatter(color_theta, color_r, c=color_rgb, marker=None, s=color_r*500, zorder=3)
-
-# CIE graph
-ax2.set_title("CIE graph (todo)")
-
-fig.set_size_inches(16, 9)
-plt.show()

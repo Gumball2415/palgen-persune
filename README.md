@@ -1,7 +1,7 @@
 # Palette Generator
 
 yet another NES palette generator, in Python
-<img src="docs/palette.png">
+<img src="docs/palette sequence.gif">
 <img src="docs/waveform sequence.gif">
 <img src="docs/QAM sequence.gif">
 
