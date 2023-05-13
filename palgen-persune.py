@@ -23,6 +23,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import colour.models
+import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
@@ -233,8 +234,6 @@ colorburst_phase = 8
 # or 1/2 of a sample
 colorburst_offset = colorburst_phase - 6 - 0.5
 
-# plt.style.use('dark_background')
-
 # signal buffer normalization
 signal_black_point = signal_table[1, 1, 0] + args.black_point
 signal_white_point = signal_table[1, 1, 0] + args.white_point
@@ -415,37 +414,19 @@ if args.normalize:
 else:
     np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
 
-
-if (args.emphasis):
-    Palette_colors_out = np.reshape(RGB_buffer,(32, 16, 3))
-    luma_range = 32
-else:
-    # crop non-emphasis colors if not enabled
-    Palette_colors_out = RGB_buffer[0]
-    luma_range = 4
-
-YUV_buffer_out = np.empty([luma_range, 16, 3], np.float64)
-for luma in range(luma_range):
-    for hue in range(16):
-        YUV_buffer_out[luma, hue] = np.matmul(RGB_to_YUV, Palette_colors_out[luma, hue])
-
-# display data about the palette, and optionally write a .pal file
-
-if (type(args.output) != type(None)):
-    with open(args.output, mode="wb") as Palette_file:
-        Palette_file.write(np.uint8(Palette_colors_out * 0xFF))
-
 if args.render_png:
     for emphasis in range(8):
         YUV_subbuffer = np.empty([4, 16, 3], np.float64)
+        color_xy_subbuffer = np.empty([4, 16, 2], np.float64)
         subpalette_buffer = RGB_buffer[emphasis]
         for luma in range(4):
             for hue in range(16):
                 YUV_subbuffer[luma, hue] = np.matmul(RGB_to_YUV, subpalette_buffer[luma, hue])
+                color_xy_subbuffer[luma, hue] = colour.XYZ_to_xy(np.matmul(s_RGB_to_XYZ, subpalette_buffer[luma, hue]))
         color_theta = np.arctan2(YUV_subbuffer[:, :, 2], YUV_subbuffer[:, :, 1])
         color_r = YUV_subbuffer[:, :, 0]
 
-        fig = plt.figure(tight_layout=True)
+        fig = plt.figure(tight_layout=True, facecolor='white')
         gs = gridspec.GridSpec(2, 2)
 
         ax0 = fig.add_subplot(gs[:, 0])
@@ -465,13 +446,45 @@ if args.render_png:
         ax1.scatter(color_theta, color_r, c=np.reshape(subpalette_buffer,(4*16, 3)), marker=None, s=color_r*500, zorder=3)
 
         # CIE graph
-        ax2.set_title("CIE graph (todo)")
+        colour.plotting.diagrams.plot_spectral_locus(
+            figure=fig,
+            axes=ax2,
+            standalone=False,
+            method='CIE 1931',
+            spectral_locus_colours='RGB',
+            aspect='equal',
+            transparent_background=False)
+        ax2.set_title("CIE 1931 chromaticity diagram")
+        ax2.grid(which='both', color='grey', linewidth=0.5, linestyle='-', alpha=0.2)
+        ax2.fill(np.delete(s_profile, 3, 0)[:,0], np.delete(s_profile, 3, 0)[:,1], color="gray", linewidth=1, fill=False)
+        ax2.scatter(color_xy_subbuffer[:,:,0], color_xy_subbuffer[:,:,1], c=np.reshape(subpalette_buffer,(4*16, 3)), zorder=3)
 
         fig.set_size_inches(16, 9)
-        plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120)
+        plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120, facecolor='white')
         plt.close()
         if not (args.emphasis):
             break
+
+if (args.emphasis):
+    RGB_buffer = np.reshape(RGB_buffer,(32, 16, 3))
+    luma_range = 32
+else:
+    # crop non-emphasis colors if not enabled
+    RGB_buffer = RGB_buffer[0]
+    luma_range = 4
+
+YUV_buffer_out = np.empty([luma_range, 16, 3], np.float64)
+color_xy = np.empty([luma_range, 16, 2], np.float64)
+for luma in range(luma_range):
+    for hue in range(16):
+        YUV_buffer_out[luma, hue] = np.matmul(RGB_to_YUV, RGB_buffer[luma, hue])
+        color_xy[luma, hue] = colour.XYZ_to_xy(np.matmul(s_RGB_to_XYZ, RGB_buffer[luma, hue]))
+
+# display data about the palette, and optionally write a .pal file
+
+if (type(args.output) != type(None)):
+    with open(args.output, mode="wb") as Palette_file:
+        Palette_file.write(np.uint8(RGB_buffer * 0xFF))
 
 color_theta = np.arctan2(YUV_buffer_out[:, :, 2], YUV_buffer_out[:, :, 1])
 color_r = YUV_buffer_out[:, :, 0]
@@ -479,7 +492,7 @@ color_r = YUV_buffer_out[:, :, 0]
 # figure plotting for palette preview
 # TODO: interactivity
 
-fig = plt.figure(tight_layout=True)
+fig = plt.figure(tight_layout=True, facecolor='white')
 gs = gridspec.GridSpec(2, 2)
 
 ax0 = fig.add_subplot(gs[:, 0])
@@ -490,16 +503,27 @@ fig.suptitle('NES palette')
 fig.tight_layout()
 # colors
 ax0.set_title("Color swatches")
-ax0.imshow(Palette_colors_out)
+ax0.imshow(RGB_buffer)
 
 # polar plot
 ax1.set_title("RGB color phase")
 ax1.set_yticklabels([])
 ax1.axis([0, 2*np.pi, 0, 1])
-ax1.scatter(color_theta, color_r, c=np.reshape(Palette_colors_out,(luma_range*16, 3)), marker=None, s=color_r*500, zorder=3)
+ax1.scatter(color_theta, color_r, c=np.reshape(RGB_buffer,(luma_range*16, 3)), marker=None, s=color_r*500, zorder=3)
 
 # CIE graph
-ax2.set_title("CIE graph (todo)")
+colour.plotting.diagrams.plot_spectral_locus(
+    figure=fig,
+    axes=ax2,
+    standalone=False,
+    method='CIE 1931',
+    spectral_locus_colours='RGB',
+    aspect='equal',
+    transparent_background=False)
+ax2.set_title("CIE 1931 chromaticity diagram")
+ax2.grid(which='both', color='grey', linewidth=0.5, linestyle='-', alpha=0.2)
+ax2.fill(np.delete(s_profile, 3, 0)[:,0], np.delete(s_profile, 3, 0)[:,1], color="gray", linewidth=1, fill=False)
+ax2.scatter(color_xy[:,:,0], color_xy[:,:,1], c=np.reshape(RGB_buffer,(luma_range*16, 3)), zorder=3)
 
 fig.set_size_inches(16, 9)
 plt.show()
