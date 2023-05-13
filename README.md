@@ -9,7 +9,7 @@ yet another NES palette generator, in Python
 
 This script requires `numpy` for arrays and matrix math.
 
-This script requires `colour.models` for colorimetry operations.
+This script requires `colour.models` library for linear light functions and `colour.plotting.diagrams` library for CIE 1931 colorimetry diagrams.
 
 This script requires `matplotlib` for graphs.
 
