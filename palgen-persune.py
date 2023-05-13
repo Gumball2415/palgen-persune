@@ -429,9 +429,9 @@ if args.render_png:
         fig = plt.figure(tight_layout=True, facecolor='white')
         gs = gridspec.GridSpec(2, 2)
 
-        ax0 = fig.add_subplot(gs[:, 0])
+        ax0 = fig.add_subplot(gs[1, 1])
         ax1 = fig.add_subplot(gs[0, 1], projection='polar')
-        ax2 = fig.add_subplot(gs[1, 1])
+        ax2 = fig.add_subplot(gs[:, 0])
 
         fig.suptitle('NES palette (emphasis = {:03b})'.format(emphasis))
         fig.tight_layout()
@@ -495,9 +495,9 @@ color_r = YUV_buffer_out[:, :, 0]
 fig = plt.figure(tight_layout=True, facecolor='white')
 gs = gridspec.GridSpec(2, 2)
 
-ax0 = fig.add_subplot(gs[:, 0])
+ax0 = fig.add_subplot(gs[1, 1])
 ax1 = fig.add_subplot(gs[0, 1], projection='polar')
-ax2 = fig.add_subplot(gs[1, 1])
+ax2 = fig.add_subplot(gs[:, 0])
 
 fig.suptitle('NES palette')
 fig.tight_layout()
