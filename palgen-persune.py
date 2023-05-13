@@ -24,97 +24,16 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import colour.models
 
-# voltage highs and lows
-# from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
-# signal[4][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
-signal_table = np.array([
-    [
-        [ 0.616, 0.500 ],
-        [ 0.228, 0.192 ]
-    ],
-    [
-        [ 0.840, 0.676 ],
-        [ 0.312, 0.256 ]
-    ],
-    [
-        [ 1.100, 0.896 ],
-        [ 0.552, 0.448 ]
-    ],
-    [
-        [ 1.100, 0.896 ],
-        [ 0.880, 0.712 ]
-    ]
-], np.float64)
-
-# B-Y and R-Y reduction factors
-BY_rf = 1/2.03
-RY_rf = 1/1.14
-
-# derived from the NTSC base matrix of luminance and color-difference
-RGB_to_YUV = np.array([
-    [ 0.299,        0.587,        0.114],
-    [-0.299*BY_rf, -0.587*BY_rf,  0.886*BY_rf],
-    [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
-], np.float64)
-
-# reference color profile, in CIE xy chromaticities
-reference_profile = np.array([
-    [0.670, 0.330],     # red
-    [0.210, 0.710],     # green
-    [0.140, 0.080],     # blue
-    [0.313, 0.329]      # white point
-], np.float64)
-
-# display color profile, in CIE xy chromaticities
-display_profile = np.array([
-    [0.670, 0.330],     # red
-    [0.210, 0.710],     # green
-    [0.140, 0.080],     # blue
-    [0.313, 0.329]      # white point
-], np.float64)
-
-# 111111------
-# 22222------2
-# 3333------33
-# 444------444
-# 55------5555
-# 6------66666
-# ------777777
-# -----888888-
-# ----999999--
-# ---AAAAAA---
-# --BBBBBB----
-# -CCCCCC-----
-# signal buffer for decoding
-voltage_buffer = np.empty([12], np.float64)
-U_buffer = np.zeros([12], np.float64)
-V_buffer = np.zeros([12], np.float64)
-
-# decoded YUV buffer,
-YUV_buffer = np.zeros([8,4,16,3], np.float64)
-
-# decoded RGB buffer
-RGB_buffer = np.zeros([8,4,16,3], np.float64)
-
-# fix issue with colors
-offset = 1
-emphasis_offset = 1
-colorburst_phase = 8
-
-# due to the way the waveform is encoded, the hue is off by 15 degrees, or 1/2 of a sample
-colorburst_offset = colorburst_phase - 6 - 0.5
-
-# plt.style.use('dark_background')
-
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.1.2")
+    epilog="version 0.2.0")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
 parser.add_argument("-n", "--normalize", action="store_true", help="normalize colors within range of RGB")
-parser.add_argument("-v", "--visualize-wave", action="store_true", help="render composite waveforms as .png in docs folder")
-parser.add_argument("-p", "--phase-QAM", action="store_true", help="render QAM demodulation as .png in docs folder")
+parser.add_argument("-w", "--waveforms", action="store_true", help="view composite waveforms")
+parser.add_argument("-p", "--phase-QAM", action="store_true", help="view QAM demodulation")
+parser.add_argument("-r", "--render-png", action="store_true", help="render views as .pngs in docs folder")
 
 parser.add_argument(
     "--brightness",
@@ -152,14 +71,169 @@ parser.add_argument(
     type = np.float64,
     help = "white point, in voltage units relative to blanking, default = 100.0/140.0",
     default = 100/140) # 100 IRE
-    
-# parser.add_argument(
-    # "--white-point",
-    # type = np.float64,
-    # help = "white point, in voltage units relative to blanking, default = 100.0/140.0",
-    # default = "")
+
+parser.add_argument(
+    "--reference-primaries-r",
+    type = np.float64,
+    nargs=2,
+    help = "reference color primary R, in CIE xy chromaticity coordinates, default = [0.640, 0.330]",
+    default = [0.670, 0.330])
+parser.add_argument(
+    "--reference-primaries-g",
+    type = np.float64,
+    nargs=2,
+    help = "reference color primary G, in CIE xy chromaticity coordinates, default = [0.300, 0.600]",
+    default = [0.210, 0.710])
+parser.add_argument(
+    "--reference-primaries-b",
+    type = np.float64,
+    nargs=2,
+    help = "reference color primary B, in CIE xy chromaticity coordinates, default = [0.150, 0.060]",
+    default = [0.140, 0.080])
+parser.add_argument(
+    "--reference-primaries-w",
+    type = np.float64,
+    nargs=2,
+    help = "reference whitepoint, in CIE xy chromaticity coordinates, default = [0.3127, 0.3290]",
+    default = [0.313, 0.329])
+
+parser.add_argument(
+    "--display-primaries-r",
+    type = np.float64,
+    nargs=2,
+    help = "display color primary R, in CIE xy chromaticity coordinates, default = [0.640, 0.330]",
+    default = [0.640, 0.330])
+parser.add_argument(
+    "--display-primaries-g",
+    type = np.float64,
+    nargs=2,
+    help = "display color primary G, in CIE xy chromaticity coordinates, default = [0.300, 0.600]",
+    default = [0.300, 0.600])
+parser.add_argument(
+    "--display-primaries-b",
+    type = np.float64,
+    nargs=2,
+    help = "display color primary B, in CIE xy chromaticity coordinates, default = [0.150, 0.060]",
+    default = [0.150, 0.060])
+parser.add_argument(
+    "--display-primaries-w",
+    type = np.float64,
+    nargs=2,
+    help = "display whitepoint, in CIE xy chromaticity coordinates, default = [0.3127, 0.3290]",
+    default = [0.3127, 0.3290])
 
 args = parser.parse_args()
+
+# voltage highs and lows
+# from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
+# signal[4][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
+signal_table = np.array([
+    [
+        [ 0.616, 0.500 ],
+        [ 0.228, 0.192 ]
+    ],
+    [
+        [ 0.840, 0.676 ],
+        [ 0.312, 0.256 ]
+    ],
+    [
+        [ 1.100, 0.896 ],
+        [ 0.552, 0.448 ]
+    ],
+    [
+        [ 1.100, 0.896 ],
+        [ 0.880, 0.712 ]
+    ]
+], np.float64)
+
+# B-Y and R-Y reduction factors
+BY_rf = 1/2.03
+RY_rf = 1/1.14
+
+# derived from the NTSC base matrix of luminance and color-difference
+RGB_to_YUV = np.array([
+    [ 0.299,        0.587,        0.114],
+    [-0.299*BY_rf, -0.587*BY_rf,  0.886*BY_rf],
+    [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
+], np.float64)
+
+# special thanks to NewRisingSun for providing the matrix equations needed for
+# color correction!
+# reference:
+# Parker, N.W. (1966): An analysis of the necessary receiver decoder corrections
+#   for color receiver operation with nonstandard primaries. in: IEEE
+#   Transactions on Broadcast and Television Receivers 12 (1), 23-32.
+
+# reference color profile, in CIE xy chromaticities
+s_profile = np.array([
+    args.reference_primaries_r,     # red
+    args.reference_primaries_g,     # green
+    args.reference_primaries_b,     # blue
+    args.reference_primaries_w      # white point
+], np.float64)
+
+# display color profile, in CIE xy chromaticities
+t_profile = np.array([
+    args.display_primaries_r,       # red
+    args.display_primaries_g,       # green
+    args.display_primaries_b,       # blue
+    args.display_primaries_w        # white point
+], np.float64)
+
+s_XYZ = colour.xy_to_XYZ(s_profile)
+t_XYZ = colour.xy_to_XYZ(t_profile)
+
+s_w = np.matmul(s_XYZ[3], np.linalg.inv(np.delete(s_XYZ, 3, 0)))
+t_w = np.matmul(t_XYZ[3], np.linalg.inv(np.delete(t_XYZ, 3, 0)))
+
+s_RGB_to_XYZ = np.array([
+    np.delete(s_XYZ, 3, 0)[:,0]*s_w,
+    np.delete(s_XYZ, 3, 0)[:,1]*s_w,
+    np.delete(s_XYZ, 3, 0)[:,2]*s_w
+])
+
+t_RGB_to_XYZ = np.array([
+    np.delete(t_XYZ, 3, 0)[:,0]*t_w,
+    np.delete(t_XYZ, 3, 0)[:,1]*t_w,
+    np.delete(t_XYZ, 3, 0)[:,2]*t_w
+])
+
+# correction matrix for linear light
+correction_matrix = np.linalg.inv(np.matmul(np.linalg.inv(s_RGB_to_XYZ), t_RGB_to_XYZ))
+
+# 111111------
+# 22222------2
+# 3333------33
+# 444------444
+# 55------5555
+# 6------66666
+# ------777777
+# -----888888-
+# ----999999--
+# ---AAAAAA---
+# --BBBBBB----
+# -CCCCCC-----
+# signal buffer for decoding
+voltage_buffer = np.empty([12], np.float64)
+U_buffer = np.zeros([12], np.float64)
+V_buffer = np.zeros([12], np.float64)
+
+# decoded YUV buffer,
+YUV_buffer = np.zeros([8,4,16,3], np.float64)
+
+# decoded RGB buffer
+RGB_buffer = np.zeros([8,4,16,3], np.float64)
+
+# fix issue with colors
+offset = 1
+emphasis_offset = 1
+colorburst_phase = 8
+
+# due to the way the waveform is encoded, the hue is off by 15 degrees,
+# or 1/2 of a sample
+colorburst_offset = colorburst_phase - 6 - 0.5
+
+# plt.style.use('dark_background')
 
 # signal buffer normalization
 signal_black_point = signal_table[1, 1, 0] + args.black_point
@@ -214,7 +288,7 @@ for emphasis in range(8):
 
             if (args.debug):
                 print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
-            if (args.visualize_wave):
+            if (args.waveforms):
                 fig = plt.figure(tight_layout=True)
                 fig.suptitle("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
                 ax = fig.subplots()
@@ -226,7 +300,10 @@ for emphasis in range(8):
                 ax.plot(x, y, 'o-', linewidth=0.7)
                 
                 fig.set_size_inches(16, 9)
-                plt.savefig("docs/waveform sequence {0:03}.png".format(sequence_counter), dpi=120)
+                if args.render_png:
+                    plt.savefig("docs/waveform sequence {0:03}.png".format(sequence_counter), dpi=120)
+                else:
+                    plt.show()
                 plt.close()
 
             # normalize voltage
@@ -306,14 +383,29 @@ for emphasis in range(8):
                 ax1.vlines(color_theta, 0, color_r)
                 
                 fig.set_size_inches(16, 9)
-                plt.savefig("docs/QAM sequence {0:03}.png".format(sequence_counter), dpi=120)
+                if args.render_png:
+                    plt.savefig("docs/QAM sequence {0:03}.png".format(sequence_counter), dpi=120)
+                else:
+                    plt.show()
                 plt.close()
 
             sequence_counter += 1
     if not (args.emphasis):
-        print("emphasis skipped")
         break
 
+# convert RGB to display output
+
+# convert signal to linear light
+RGB_buffer = colour.models.oetf_inverse_BT709(RGB_buffer)
+
+# transform linear light
+for emphasis in range(8):
+    for luma in range(4):
+        for hue in range(16):
+            RGB_buffer[emphasis, luma, hue] = np.matmul(correction_matrix, RGB_buffer[emphasis, luma, hue])
+
+# convert linear light to signal
+RGB_buffer = colour.models.oetf_BT709(RGB_buffer)
 
 # normalize RGB to 0.0-1.0
 # TODO: different clipping methods
@@ -322,16 +414,6 @@ if args.normalize:
     RGB_buffer /= (np.amax(RGB_buffer) - np.amin(RGB_buffer))
 else:
     np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
-
-# convert RGB to display output
-
-# convert signal to linear light
-RGB_buffer = colour.models.oetf_inverse_BT709(RGB_buffer)
-
-# transform linear light
-
-# convert linear light to signal
-RGB_buffer = colour.models.oetf_BT709(RGB_buffer)
 
 
 if (args.emphasis):
@@ -353,42 +435,43 @@ if (type(args.output) != type(None)):
     with open(args.output, mode="wb") as Palette_file:
         Palette_file.write(np.uint8(Palette_colors_out * 0xFF))
 
-for emphasis in range(8):
-    YUV_subbuffer = np.empty([4, 16, 3], np.float64)
-    subpalette_buffer = RGB_buffer[emphasis]
-    for luma in range(4):
-        for hue in range(16):
-            YUV_subbuffer[luma, hue] = np.matmul(RGB_to_YUV, subpalette_buffer[luma, hue])
-    color_theta = np.arctan2(YUV_subbuffer[:, :, 2], YUV_subbuffer[:, :, 1])
-    color_r = YUV_subbuffer[:, :, 0]
+if args.render_png:
+    for emphasis in range(8):
+        YUV_subbuffer = np.empty([4, 16, 3], np.float64)
+        subpalette_buffer = RGB_buffer[emphasis]
+        for luma in range(4):
+            for hue in range(16):
+                YUV_subbuffer[luma, hue] = np.matmul(RGB_to_YUV, subpalette_buffer[luma, hue])
+        color_theta = np.arctan2(YUV_subbuffer[:, :, 2], YUV_subbuffer[:, :, 1])
+        color_r = YUV_subbuffer[:, :, 0]
 
-    fig = plt.figure(tight_layout=True)
-    gs = gridspec.GridSpec(2, 2)
+        fig = plt.figure(tight_layout=True)
+        gs = gridspec.GridSpec(2, 2)
 
-    ax0 = fig.add_subplot(gs[:, 0])
-    ax1 = fig.add_subplot(gs[0, 1], projection='polar')
-    ax2 = fig.add_subplot(gs[1, 1])
+        ax0 = fig.add_subplot(gs[:, 0])
+        ax1 = fig.add_subplot(gs[0, 1], projection='polar')
+        ax2 = fig.add_subplot(gs[1, 1])
 
-    fig.suptitle('NES palette (emphasis = {:03b})'.format(emphasis))
-    fig.tight_layout()
-    # colors
-    ax0.set_title("Color swatches")
-    ax0.imshow(subpalette_buffer)
+        fig.suptitle('NES palette (emphasis = {:03b})'.format(emphasis))
+        fig.tight_layout()
+        # colors
+        ax0.set_title("Color swatches")
+        ax0.imshow(subpalette_buffer)
 
-    # polar plot
-    ax1.set_title("RGB color phase")
-    ax1.set_yticklabels([])
-    ax1.axis([0, 2*np.pi, 0, 1])
-    ax1.scatter(color_theta, color_r, c=np.reshape(subpalette_buffer,(4*16, 3)), marker=None, s=color_r*500, zorder=3)
+        # polar plot
+        ax1.set_title("RGB color phase")
+        ax1.set_yticklabels([])
+        ax1.axis([0, 2*np.pi, 0, 1])
+        ax1.scatter(color_theta, color_r, c=np.reshape(subpalette_buffer,(4*16, 3)), marker=None, s=color_r*500, zorder=3)
 
-    # CIE graph
-    ax2.set_title("CIE graph (todo)")
+        # CIE graph
+        ax2.set_title("CIE graph (todo)")
 
-    fig.set_size_inches(16, 9)
-    plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120)
-    plt.close()
-    if not (args.emphasis):
-        break
+        fig.set_size_inches(16, 9)
+        plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120)
+        plt.close()
+        if not (args.emphasis):
+            break
 
 color_theta = np.arctan2(YUV_buffer_out[:, :, 2], YUV_buffer_out[:, :, 1])
 color_r = YUV_buffer_out[:, :, 0]
@@ -420,3 +503,4 @@ ax2.set_title("CIE graph (todo)")
 
 fig.set_size_inches(16, 9)
 plt.show()
+plt.close()
