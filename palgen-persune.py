@@ -77,25 +77,25 @@ parser.add_argument(
     "--reference-primaries-r",
     type = np.float64,
     nargs=2,
-    help = "reference color primary R, in CIE xy chromaticity coordinates, default = [0.640, 0.330]",
+    help = "reference color primary R, in CIE xy chromaticity coordinates, default = [0.670, 0.330]",
     default = [0.670, 0.330])
 parser.add_argument(
     "--reference-primaries-g",
     type = np.float64,
     nargs=2,
-    help = "reference color primary G, in CIE xy chromaticity coordinates, default = [0.300, 0.600]",
+    help = "reference color primary G, in CIE xy chromaticity coordinates, default = [0.210, 0.710]",
     default = [0.210, 0.710])
 parser.add_argument(
     "--reference-primaries-b",
     type = np.float64,
     nargs=2,
-    help = "reference color primary B, in CIE xy chromaticity coordinates, default = [0.150, 0.060]",
+    help = "reference color primary B, in CIE xy chromaticity coordinates, default = [0.140, 0.080]",
     default = [0.140, 0.080])
 parser.add_argument(
     "--reference-primaries-w",
     type = np.float64,
     nargs=2,
-    help = "reference whitepoint, in CIE xy chromaticity coordinates, default = [0.3127, 0.3290]",
+    help = "reference whitepoint, in CIE xy chromaticity coordinates, default = [0.313, 0.329]",
     default = [0.313, 0.329])
 
 parser.add_argument(

@@ -51,13 +51,13 @@ options:
   --white-point WHITE_POINT
                         white point, in voltage units relative to blanking, default = 100.0/140.0
   --reference-primaries-r REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R
-                        reference color primary R, in CIE xy chromaticity coordinates, default = [0.640, 0.330]
+                        reference color primary R, in CIE xy chromaticity coordinates, default = [0.670, 0.330]
   --reference-primaries-g REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G
-                        reference color primary G, in CIE xy chromaticity coordinates, default = [0.300, 0.600]
+                        reference color primary G, in CIE xy chromaticity coordinates, default = [0.210, 0.710]
   --reference-primaries-b REFERENCE_PRIMARIES_B REFERENCE_PRIMARIES_B
-                        reference color primary B, in CIE xy chromaticity coordinates, default = [0.150, 0.060]
+                        reference color primary B, in CIE xy chromaticity coordinates, default = [0.140, 0.080]
   --reference-primaries-w REFERENCE_PRIMARIES_W REFERENCE_PRIMARIES_W
-                        reference whitepoint, in CIE xy chromaticity coordinates, default = [0.3127, 0.3290]
+                        reference whitepoint, in CIE xy chromaticity coordinates, default = [0.313, 0.329]
   --display-primaries-r DISPLAY_PRIMARIES_R DISPLAY_PRIMARIES_R
                         display color primary R, in CIE xy chromaticity coordinates, default = [0.640, 0.330]
   --display-primaries-g DISPLAY_PRIMARIES_G DISPLAY_PRIMARIES_G
