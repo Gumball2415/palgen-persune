@@ -24,7 +24,7 @@ options:
                         .pal file output
   -e, --emphasis        add emphasis entries
   -d, --debug           debug messages
-  -n, --normalize       normalize white point and black point within range of voltages
+  -n, --normalize       normalize colors within range of RGB
   -v, --visualize-wave  render composite waveforms as .png in docs folder
   -p, --phase-QAM       render QAM demodulation as .png in docs folder
   --brightness BRIGHTNESS
@@ -40,7 +40,7 @@ options:
   --white-point WHITE_POINT
                         white point, in voltage units relative to blanking, default = 100.0/140.0
 
-version 0.1.1
+version 0.1.2
 ```
 
 ## License

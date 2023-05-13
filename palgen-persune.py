@@ -86,7 +86,7 @@ display_profile = np.array([
 # --BBBBBB----
 # -CCCCCC-----
 # signal buffer for decoding
-voltage_buffer = np.zeros([12], np.float64)
+voltage_buffer = np.empty([12], np.float64)
 U_buffer = np.zeros([12], np.float64)
 V_buffer = np.zeros([12], np.float64)
 
@@ -108,12 +108,11 @@ colorburst_offset = colorburst_phase - 6 - 0.5
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.1.1")
+    epilog="version 0.1.2")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
 parser.add_argument("-n", "--normalize", action="store_true", help="normalize colors within range of RGB")
-parser.add_argument("-s", "--scale", action="store_true", help="scale RGB values")
 parser.add_argument("-v", "--visualize-wave", action="store_true", help="render composite waveforms as .png in docs folder")
 parser.add_argument("-p", "--phase-QAM", action="store_true", help="render QAM demodulation as .png in docs folder")
 
@@ -303,59 +302,26 @@ for emphasis in range(8):
                 color_r =  np.sqrt(U_avg**2 + V_avg**2)
                 ax1.axis([0, 2*np.pi, 0, 0.3])
                 ax1.set_title("Phasor plot")
-                # ax1.set_yticklabels([])
                 ax1.scatter(color_theta, color_r)
                 ax1.vlines(color_theta, 0, color_r)
                 
                 fig.set_size_inches(16, 9)
-                # plt.show()
                 plt.savefig("docs/QAM sequence {0:03}.png".format(sequence_counter), dpi=120)
                 plt.close()
 
             sequence_counter += 1
-    # normalize RGB to 0.0-1.0
-    # TODO: different clipping methods
-    if args.normalize:
-        RGB_buffer[emphasis] -= np.amin(RGB_buffer[emphasis])
-        RGB_buffer[emphasis] /= (np.amax(RGB_buffer[emphasis]) - np.amin(RGB_buffer[emphasis]))
-    else:
-        np.clip(RGB_buffer[emphasis], 0, 1, out=RGB_buffer[emphasis])
-    color_theta = np.arctan2(YUV_buffer[emphasis, :, :, 2], YUV_buffer[emphasis, :, :, 1])
-    color_r = YUV_buffer[emphasis, :, :, 0]
-    
-    Palette_colors_out = RGB_buffer[emphasis]
-
-    # figure plotting for palette preview
-    # TODO: interactivity
-
-    fig = plt.figure(tight_layout=True)
-    gs = gridspec.GridSpec(2, 2)
-
-    ax0 = fig.add_subplot(gs[:, 0])
-    ax1 = fig.add_subplot(gs[0, 1], projection='polar')
-    ax2 = fig.add_subplot(gs[1, 1])
-
-    fig.suptitle('NES palette (emphasis = {:03b})'.format(emphasis))
-    fig.tight_layout()
-    # colors
-    ax0.set_title("Color swatches")
-    ax0.imshow(RGB_buffer[emphasis])
-
-    # polar plot
-    ax1.set_title("RGB color phase")
-    ax1.set_yticklabels([])
-    ax1.axis([0, 2*np.pi, 0, 1])
-    ax1.scatter(color_theta, color_r, c=np.reshape(RGB_buffer[emphasis],(4*16, 3)), marker=None, s=color_r*500, zorder=3)
-
-    # CIE graph
-    ax2.set_title("CIE graph (todo)")
-
-    fig.set_size_inches(16, 9)
-    plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120)
-    # plt.show()
     if not (args.emphasis):
         print("emphasis skipped")
         break
+
+
+# normalize RGB to 0.0-1.0
+# TODO: different clipping methods
+if args.normalize:
+    RGB_buffer -= np.amin(RGB_buffer)
+    RGB_buffer /= (np.amax(RGB_buffer) - np.amin(RGB_buffer))
+else:
+    np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
 
 # convert RGB to display output
 
@@ -370,12 +336,87 @@ RGB_buffer = colour.models.oetf_BT709(RGB_buffer)
 
 if (args.emphasis):
     Palette_colors_out = np.reshape(RGB_buffer,(32, 16, 3))
+    luma_range = 32
 else:
     # crop non-emphasis colors if not enabled
     Palette_colors_out = RGB_buffer[0]
+    luma_range = 4
+
+YUV_buffer_out = np.empty([luma_range, 16, 3], np.float64)
+for luma in range(luma_range):
+    for hue in range(16):
+        YUV_buffer_out[luma, hue] = np.matmul(RGB_to_YUV, Palette_colors_out[luma, hue])
 
 # display data about the palette, and optionally write a .pal file
 
 if (type(args.output) != type(None)):
     with open(args.output, mode="wb") as Palette_file:
         Palette_file.write(np.uint8(Palette_colors_out * 0xFF))
+
+for emphasis in range(8):
+    YUV_subbuffer = np.empty([4, 16, 3], np.float64)
+    subpalette_buffer = RGB_buffer[emphasis]
+    for luma in range(4):
+        for hue in range(16):
+            YUV_subbuffer[luma, hue] = np.matmul(RGB_to_YUV, subpalette_buffer[luma, hue])
+    color_theta = np.arctan2(YUV_subbuffer[:, :, 2], YUV_subbuffer[:, :, 1])
+    color_r = YUV_subbuffer[:, :, 0]
+
+    fig = plt.figure(tight_layout=True)
+    gs = gridspec.GridSpec(2, 2)
+
+    ax0 = fig.add_subplot(gs[:, 0])
+    ax1 = fig.add_subplot(gs[0, 1], projection='polar')
+    ax2 = fig.add_subplot(gs[1, 1])
+
+    fig.suptitle('NES palette (emphasis = {:03b})'.format(emphasis))
+    fig.tight_layout()
+    # colors
+    ax0.set_title("Color swatches")
+    ax0.imshow(subpalette_buffer)
+
+    # polar plot
+    ax1.set_title("RGB color phase")
+    ax1.set_yticklabels([])
+    ax1.axis([0, 2*np.pi, 0, 1])
+    ax1.scatter(color_theta, color_r, c=np.reshape(subpalette_buffer,(4*16, 3)), marker=None, s=color_r*500, zorder=3)
+
+    # CIE graph
+    ax2.set_title("CIE graph (todo)")
+
+    fig.set_size_inches(16, 9)
+    plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120)
+    plt.close()
+    if not (args.emphasis):
+        break
+
+color_theta = np.arctan2(YUV_buffer_out[:, :, 2], YUV_buffer_out[:, :, 1])
+color_r = YUV_buffer_out[:, :, 0]
+
+# figure plotting for palette preview
+# TODO: interactivity
+
+fig = plt.figure(tight_layout=True)
+gs = gridspec.GridSpec(2, 2)
+
+ax0 = fig.add_subplot(gs[:, 0])
+ax1 = fig.add_subplot(gs[0, 1], projection='polar')
+ax2 = fig.add_subplot(gs[1, 1])
+
+fig.suptitle('NES palette')
+fig.tight_layout()
+# colors
+ax0.set_title("Color swatches")
+ax0.imshow(Palette_colors_out)
+
+# polar plot
+ax1.set_title("RGB color phase")
+ax1.set_yticklabels([])
+ax1.axis([0, 2*np.pi, 0, 1])
+ax1.scatter(color_theta, color_r, c=np.reshape(Palette_colors_out,(luma_range*16, 3)), marker=None, s=color_r*500, zorder=3)
+
+# CIE graph
+ax2.set_title("CIE graph (todo)")
+
+fig.set_size_inches(16, 9)
+plt.show()
