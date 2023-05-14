@@ -221,13 +221,14 @@ correction_matrix = np.linalg.inv(np.matmul(np.linalg.inv(s_RGB_to_XYZ), t_RGB_t
 # -CCCCCC-----
 # signal buffer for decoding
 voltage_buffer = np.empty([12], np.float64)
-U_buffer = np.zeros([12], np.float64)
-V_buffer = np.zeros([12], np.float64)
+U_buffer = np.empty([12], np.float64)
+V_buffer = np.empty([12], np.float64)
 
 # decoded YUV buffer,
-YUV_buffer = np.zeros([8,4,16,3], np.float64)
+YUV_buffer = np.empty([8,4,16,3], np.float64)
 
 # decoded RGB buffer
+# has to be zero'd out for the normalize function to work
 RGB_buffer = np.zeros([8,4,16,3], np.float64)
 
 # fix issue with colors
@@ -242,7 +243,6 @@ colorburst_offset = colorburst_phase - 6 - 0.5
 # signal buffer normalization
 signal_black_point = signal_table[1, 1, 0] + args.black_point
 signal_white_point = signal_table[1, 1, 0] + args.white_point
-amplification_factor = 1/(signal_white_point - signal_black_point)
 
 # used for image sequence plotting
 sequence_counter = 0
@@ -379,7 +379,7 @@ for emphasis in range(8):
 
             # normalize voltage
             voltage_buffer -= signal_black_point
-            voltage_buffer *= amplification_factor
+            voltage_buffer /= (signal_white_point - signal_black_point)
 
             # decode voltage buffer to YUV
             # decode Y
@@ -400,7 +400,6 @@ for emphasis in range(8):
                     np.radians(args.hue) -
                     np.radians(args.phase_skew * luma))
             YUV_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
-
 
             # decode YUV to RGB
             RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), YUV_buffer[emphasis, luma, hue])
@@ -489,6 +488,7 @@ else:
     np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
     np.clip(RGB_raw, 0, 1, out=RGB_raw)
 
+# display data about the palette, and optionally write a .pal file
 if (args.emphasis):
     RGB_buffer = np.reshape(RGB_buffer,(32, 16, 3))
     RGB_raw = np.reshape(RGB_raw,(32, 16, 3))
@@ -498,8 +498,6 @@ else:
     RGB_buffer = RGB_buffer[0]
     RGB_raw = RGB_raw[0]
     luma_range = 4
-
-# display data about the palette, and optionally write a .pal file
 
 if (type(args.output) != type(None)):
     with open(args.output, mode="wb") as Palette_file:

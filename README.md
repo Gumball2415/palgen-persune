@@ -5,6 +5,8 @@ yet another NES palette generator, in Python
 <img src="docs/waveform sequence.gif">
 <img src="docs/QAM sequence.gif">
 
+something to note: there _is_ no one true NES palette, but this generator can pretty much approach colors that looks good enough.
+
 ## Requirements
 
 This script requires `numpy` for arrays and matrix math.
