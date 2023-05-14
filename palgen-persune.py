@@ -62,17 +62,21 @@ parser.add_argument(
     type = np.float64,
     help = "differential phase distortion, in degrees, default = 0.0",
     default = 0)
+# 7.5 IRE
 parser.add_argument(
     "--black-point",
     type = np.float64,
     help = "black point, in voltage units relative to blanking, default = 7.5/140.0",
-    default =  7.5/140) # 7.5 IRE
+    default =  7.5/140)
+# 100 IRE
 parser.add_argument(
     "--white-point",
     type = np.float64,
     help = "white point, in voltage units relative to blanking, default = 100.0/140.0",
-    default = 100/140) # 100 IRE
+    default = 100/140)
 
+
+# NTSC 1953 primaries and illuminant C whitepoint
 parser.add_argument(
     "--reference-primaries-r",
     type = np.float64,
@@ -96,8 +100,9 @@ parser.add_argument(
     type = np.float64,
     nargs=2,
     help = "reference whitepoint, in CIE xy chromaticity coordinates, default = [0.313, 0.329]",
-    default = [0.313, 0.329])
+    default = [0.310, 0.316])
 
+# Rec. 709/sRGB primaries and illuminant D65 whitepoint
 parser.add_argument(
     "--display-primaries-r",
     type = np.float64,
@@ -241,6 +246,73 @@ amplification_factor = 1/(signal_white_point - signal_black_point)
 
 # used for image sequence plotting
 sequence_counter = 0
+
+# figure plotting for palette preview
+# TODO: interactivity
+def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = False, export_image = False):
+    if all_emphasis or not args.emphasis:
+        RGB_sub = RGB_buffer
+        RGB_sub_raw = RGB_raw
+    else:
+        RGB_sub = np.split(RGB_buffer, 8, 0)[emphasis]
+        RGB_sub_raw = np.split(RGB_raw, 8, 0)[emphasis]
+
+    YUV_buffer_out = np.empty([luma_range, 16, 3], np.float64)
+    color_xy = np.empty([luma_range, 16, 2], np.float64)
+    color_xy_raw = np.empty([luma_range, 16, 2], np.float64)
+    for luma in range(luma_range):
+        for hue in range(16):
+            YUV_buffer_out[luma, hue] = np.matmul(RGB_to_YUV, RGB_sub[luma, hue])
+            color_xy[luma, hue] = colour.XYZ_to_xy(np.matmul(t_RGB_to_XYZ, RGB_sub[luma, hue]))
+            color_xy_raw[luma, hue] = colour.XYZ_to_xy(np.matmul(s_RGB_to_XYZ, RGB_sub_raw[luma, hue]))
+
+    color_theta = np.arctan2(YUV_buffer_out[:, :, 2], YUV_buffer_out[:, :, 1])
+    color_r = YUV_buffer_out[:, :, 0]
+
+    fig = plt.figure(tight_layout=True)
+    gs = gridspec.GridSpec(2, 2)
+
+    ax0 = fig.add_subplot(gs[1, 1])
+    ax1 = fig.add_subplot(gs[0, 1], projection='polar')
+    ax2 = fig.add_subplot(gs[:, 0])
+
+    fig.suptitle('NES palette')
+    fig.tight_layout()
+
+    # colors
+    ax0.set_title("Color swatches")
+    ax0.imshow(RGB_sub)
+
+    # polar plot
+    ax1.set_title("RGB color phase")
+    ax1.set_yticklabels([])
+    ax1.axis([0, 2*np.pi, 0, 1])
+    ax1.scatter(color_theta, color_r, c=np.reshape(RGB_sub,(luma_range*16, 3)), marker=None, s=color_r*500, zorder=3)
+
+    # CIE graph
+    colour.plotting.diagrams.plot_spectral_locus(
+        figure=fig,
+        axes=ax2,
+        standalone=False,
+        method='CIE 1931',
+        spectral_locus_colours='RGB',
+        aspect='equal',
+        transparent_background=False)
+    ax2.set_title("CIE 1931 chromaticity diagram")
+    ax2.grid(which='both', color='grey', linewidth=0.5, linestyle='-', alpha=0.2)
+    ax2.fill(np.delete(s_profile, 3, 0)[:,0], np.delete(s_profile, 3, 0)[:,1], color="gray", linewidth=1, fill=False, label="reference colorspace")
+    ax2.fill(np.delete(t_profile, 3, 0)[:,0], np.delete(t_profile, 3, 0)[:,1], color="red", linewidth=1, fill=False, label="display colorspace")
+    ax2.legend(loc='upper right')
+    ax2.scatter(color_xy[:,:,0], color_xy[:,:,1], c=np.reshape(RGB_sub,(luma_range*16, 3)), zorder=3)
+    ax2.scatter(color_xy_raw[:,:,0], color_xy_raw[:,:,1], c=np.reshape(RGB_sub,(luma_range*16, 3)), alpha=0.1)
+
+    fig.set_size_inches(16, 9)
+    if export_image:
+        plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120, facecolor='white')
+    else:
+        plt.show()
+    plt.close()
+
 
 for emphasis in range(8):
     # emphasis bitmask, travelling from lsb to msb
@@ -393,7 +465,7 @@ for emphasis in range(8):
         break
 
 # convert RGB to display output
-
+RGB_raw = RGB_buffer
 # convert signal to linear light
 RGB_buffer = colour.models.oetf_inverse_BT709(RGB_buffer)
 
@@ -411,74 +483,21 @@ RGB_buffer = colour.models.oetf_BT709(RGB_buffer)
 if args.normalize:
     RGB_buffer -= np.amin(RGB_buffer)
     RGB_buffer /= (np.amax(RGB_buffer) - np.amin(RGB_buffer))
+    RGB_raw -= np.amin(RGB_raw)
+    RGB_raw /= (np.amax(RGB_raw) - np.amin(RGB_raw))
 else:
     np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
-
-if args.render_png:
-    for emphasis in range(8):
-        YUV_subbuffer = np.empty([4, 16, 3], np.float64)
-        color_xy_subbuffer = np.empty([4, 16, 2], np.float64)
-        subpalette_buffer = RGB_buffer[emphasis]
-        for luma in range(4):
-            for hue in range(16):
-                YUV_subbuffer[luma, hue] = np.matmul(RGB_to_YUV, subpalette_buffer[luma, hue])
-                color_xy_subbuffer[luma, hue] = colour.XYZ_to_xy(np.matmul(s_RGB_to_XYZ, subpalette_buffer[luma, hue]))
-        color_theta = np.arctan2(YUV_subbuffer[:, :, 2], YUV_subbuffer[:, :, 1])
-        color_r = YUV_subbuffer[:, :, 0]
-
-        fig = plt.figure(tight_layout=True, facecolor='white')
-        gs = gridspec.GridSpec(2, 2)
-
-        ax0 = fig.add_subplot(gs[1, 1])
-        ax1 = fig.add_subplot(gs[0, 1], projection='polar')
-        ax2 = fig.add_subplot(gs[:, 0])
-
-        fig.suptitle('NES palette (emphasis = {:03b})'.format(emphasis))
-        fig.tight_layout()
-        # colors
-        ax0.set_title("Color swatches")
-        ax0.imshow(subpalette_buffer)
-
-        # polar plot
-        ax1.set_title("RGB color phase")
-        ax1.set_yticklabels([])
-        ax1.axis([0, 2*np.pi, 0, 1])
-        ax1.scatter(color_theta, color_r, c=np.reshape(subpalette_buffer,(4*16, 3)), marker=None, s=color_r*500, zorder=3)
-
-        # CIE graph
-        colour.plotting.diagrams.plot_spectral_locus(
-            figure=fig,
-            axes=ax2,
-            standalone=False,
-            method='CIE 1931',
-            spectral_locus_colours='RGB',
-            aspect='equal',
-            transparent_background=False)
-        ax2.set_title("CIE 1931 chromaticity diagram")
-        ax2.grid(which='both', color='grey', linewidth=0.5, linestyle='-', alpha=0.2)
-        ax2.fill(np.delete(s_profile, 3, 0)[:,0], np.delete(s_profile, 3, 0)[:,1], color="gray", linewidth=1, fill=False)
-        ax2.scatter(color_xy_subbuffer[:,:,0], color_xy_subbuffer[:,:,1], c=np.reshape(subpalette_buffer,(4*16, 3)), zorder=3)
-
-        fig.set_size_inches(16, 9)
-        plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120, facecolor='white')
-        plt.close()
-        if not (args.emphasis):
-            break
+    np.clip(RGB_raw, 0, 1, out=RGB_raw)
 
 if (args.emphasis):
     RGB_buffer = np.reshape(RGB_buffer,(32, 16, 3))
+    RGB_raw = np.reshape(RGB_raw,(32, 16, 3))
     luma_range = 32
 else:
     # crop non-emphasis colors if not enabled
     RGB_buffer = RGB_buffer[0]
+    RGB_raw = RGB_raw[0]
     luma_range = 4
-
-YUV_buffer_out = np.empty([luma_range, 16, 3], np.float64)
-color_xy = np.empty([luma_range, 16, 2], np.float64)
-for luma in range(luma_range):
-    for hue in range(16):
-        YUV_buffer_out[luma, hue] = np.matmul(RGB_to_YUV, RGB_buffer[luma, hue])
-        color_xy[luma, hue] = colour.XYZ_to_xy(np.matmul(s_RGB_to_XYZ, RGB_buffer[luma, hue]))
 
 # display data about the palette, and optionally write a .pal file
 
@@ -486,45 +505,10 @@ if (type(args.output) != type(None)):
     with open(args.output, mode="wb") as Palette_file:
         Palette_file.write(np.uint8(RGB_buffer * 0xFF))
 
-color_theta = np.arctan2(YUV_buffer_out[:, :, 2], YUV_buffer_out[:, :, 1])
-color_r = YUV_buffer_out[:, :, 0]
+if args.render_png:
+    for emphasis in range(8):
+        NES_palette_plot(RGB_buffer, RGB_raw, emphasis, 4, False, True)
+        if not (args.emphasis):
+            break
 
-# figure plotting for palette preview
-# TODO: interactivity
-
-fig = plt.figure(tight_layout=True, facecolor='white')
-gs = gridspec.GridSpec(2, 2)
-
-ax0 = fig.add_subplot(gs[1, 1])
-ax1 = fig.add_subplot(gs[0, 1], projection='polar')
-ax2 = fig.add_subplot(gs[:, 0])
-
-fig.suptitle('NES palette')
-fig.tight_layout()
-# colors
-ax0.set_title("Color swatches")
-ax0.imshow(RGB_buffer)
-
-# polar plot
-ax1.set_title("RGB color phase")
-ax1.set_yticklabels([])
-ax1.axis([0, 2*np.pi, 0, 1])
-ax1.scatter(color_theta, color_r, c=np.reshape(RGB_buffer,(luma_range*16, 3)), marker=None, s=color_r*500, zorder=3)
-
-# CIE graph
-colour.plotting.diagrams.plot_spectral_locus(
-    figure=fig,
-    axes=ax2,
-    standalone=False,
-    method='CIE 1931',
-    spectral_locus_colours='RGB',
-    aspect='equal',
-    transparent_background=False)
-ax2.set_title("CIE 1931 chromaticity diagram")
-ax2.grid(which='both', color='grey', linewidth=0.5, linestyle='-', alpha=0.2)
-ax2.fill(np.delete(s_profile, 3, 0)[:,0], np.delete(s_profile, 3, 0)[:,1], color="gray", linewidth=1, fill=False)
-ax2.scatter(color_xy[:,:,0], color_xy[:,:,1], c=np.reshape(RGB_buffer,(luma_range*16, 3)), zorder=3)
-
-fig.set_size_inches(16, 9)
-plt.show()
-plt.close()
+NES_palette_plot(RGB_buffer, RGB_raw, 0, luma_range, True)
