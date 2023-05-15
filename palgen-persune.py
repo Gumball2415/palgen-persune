@@ -171,7 +171,7 @@ RGB_to_YUV = np.array([
 #   for color receiver operation with nonstandard primaries. in: IEEE
 #   Transactions on Broadcast and Television Receivers 12 (1), 23-32.
 
-# reference color profile, in CIE xy chromaticities
+# reference color profile, in CIE xy chromaticity coordinates
 s_profile = np.array([
     args.reference_primaries_r,     # red
     args.reference_primaries_g,     # green
@@ -179,7 +179,7 @@ s_profile = np.array([
     args.reference_primaries_w      # white point
 ], np.float64)
 
-# display color profile, in CIE xy chromaticities
+# display color profile, in CIE xy chromaticity coordinates
 t_profile = np.array([
     args.display_primaries_r,       # red
     args.display_primaries_g,       # green
@@ -428,7 +428,7 @@ for emphasis in range(8):
                 U_avg = np.average(U_buffer)
                 V_avg = np.average(V_buffer)
                 
-                range_axis = (signal_white_point * amplification_factor) - signal_black_point
+                range_axis = (signal_white_point / (signal_white_point - signal_black_point)) - signal_black_point
                 axY.set_title("Y decoding")
                 axY.set_ylabel("value")
                 axY.axis([0, 12, -1*range_axis, range_axis])
