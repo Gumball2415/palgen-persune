@@ -27,14 +27,15 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.2.0")
+    epilog="version 0.2.1")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
-parser.add_argument("-n", "--normalize", action="store_true", help="normalize colors within range of RGB")
+parser.add_argument("-n", "--normalize", action="store_true", help="normalize decoded colors within range of RGB (ignores black and white points, contrast, and brightness)")
 parser.add_argument("-w", "--waveforms", action="store_true", help="view composite waveforms")
 parser.add_argument("-p", "--phase-QAM", action="store_true", help="view QAM demodulation")
 parser.add_argument("-r", "--render-png", action="store_true", help="render views as .pngs in docs folder")
+parser.add_argument("-s", "--setup-disable", action="store_true", help="normalize NES signal levels within luma range (ignores black and white points)")
 
 parser.add_argument(
     "--brightness",
@@ -66,13 +67,13 @@ parser.add_argument(
 parser.add_argument(
     "--black-point",
     type = np.float64,
-    help = "black point, in voltage units relative to blanking, default = 7.5/140.0",
+    help = "black point, in voltage units relative to blanking, default = 7.5/140.0 (7.5 IRE)",
     default =  7.5/140)
 # 100 IRE
 parser.add_argument(
     "--white-point",
     type = np.float64,
-    help = "white point, in voltage units relative to blanking, default = 100.0/140.0",
+    help = "white point, in voltage units relative to blanking, default = 100.0/140.0 (100 IRE)",
     default = 100/140)
 
 
@@ -241,8 +242,12 @@ colorburst_phase = 8
 colorburst_offset = colorburst_phase - 6 - 0.5
 
 # signal buffer normalization
-signal_black_point = signal_table[1, 1, 0] + args.black_point
-signal_white_point = signal_table[1, 1, 0] + args.white_point
+if args.setup_disable:
+    signal_black_point = signal_table[1, 1, 0]
+    signal_white_point = signal_table[3, 0, 0]
+else:
+    signal_black_point = signal_table[1, 1, 0] + args.black_point
+    signal_white_point = signal_table[1, 1, 0] + args.white_point
 
 # used for image sequence plotting
 sequence_counter = 0
