@@ -386,8 +386,6 @@ for emphasis in range(8):
                 plt.close()
 
             # normalize voltage
-            voltage_buffer -= signal_black_point
-            voltage_buffer /= (signal_white_point - signal_black_point)
 
             # decode voltage buffer to YUV
             # decode Y
@@ -412,8 +410,11 @@ for emphasis in range(8):
             # decode YUV to RGB
             RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), YUV_buffer[emphasis, luma, hue])
 
-            # apply brightness and contrast
-            RGB_buffer[emphasis, luma, hue] = (RGB_buffer[emphasis, luma, hue] + args.brightness) * (args.contrast + 1)
+            # apply black and white points, brightness, and contrast
+            RGB_buffer[emphasis, luma, hue] -= signal_black_point
+            RGB_buffer[emphasis, luma, hue] /= (signal_white_point - signal_black_point)
+            RGB_buffer[emphasis, luma, hue] += args.brightness
+            RGB_buffer[emphasis, luma, hue] *= (args.contrast + 1)
 
             # visualize chroma decoding
             if (args.phase_QAM):
@@ -434,9 +435,9 @@ for emphasis in range(8):
                 range_axis = (signal_white_point / (signal_white_point - signal_black_point)) - signal_black_point
                 axY.set_title("Y decoding")
                 axY.set_ylabel("value")
-                axY.axis([0, 12, -1*range_axis, range_axis])
-                axY.plot(x, voltage_buffer, 'o-', linewidth=0.7, label='normalized signal')
-                axY.plot(x, np.full((12), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format(Y_avg))
+                axY.axis([0, 12, 0, range_axis])
+                axY.plot(x, voltage_buffer, 'o-', linewidth=0.7, label='composite signal')
+                axY.plot(x, np.full((12), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format((Y_avg - signal_black_point) / (signal_white_point - signal_black_point)))
                 axY.legend(loc='lower right')
                 
                 axU.set_title("U decoding")
