@@ -190,7 +190,7 @@ RGB_to_YUV = np.array([
 # chromatic adaptation functions!
 
 # reference color profile colorspace
-s_colorspace = colour.RGB_COLOURSPACES[args.reference_colorspace]
+s_colorspace = colour.RGB_COLOURSPACES[args.reference_colorspace].copy()
 if (type(args.reference_primaries_r) != type(None)) and (type(args.reference_primaries_g) != type(None)) and (type(args.reference_primaries_b) != type(None)): 
     s_colorspace.name = "custom primaries"
     s_colorspace.primaries = np.array([
@@ -203,7 +203,7 @@ if (type(args.reference_primaries_w) != type(None)):
     s_colorspace.whitepoint_name = "custom whitepoint"
 
 # display color profile colorspace
-t_colorspace = colour.RGB_COLOURSPACES[args.display_colorspace]
+t_colorspace = colour.RGB_COLOURSPACES[args.display_colorspace].copy()
 if (type(args.display_primaries_r) != type(None)) and (type(args.display_primaries_g) != type(None)) and (type(args.display_primaries_b) != type(None)):
     t_colorspace.name = "custom primaries"
     t_colorspace.primaries = np.array([
