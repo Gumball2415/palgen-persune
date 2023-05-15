@@ -27,7 +27,7 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.2.3")
+    epilog="version 0.3.0")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
@@ -39,95 +39,116 @@ parser.add_argument("-r", "--render-png", action="store_true", help="render view
 parser.add_argument("-s", "--setup-disable", action="store_true", help="normalize NES signal levels within luma range (ignores black and white points)")
 
 parser.add_argument(
+    "-bri",
     "--brightness",
     type = np.float64,
     help = "brightness delta, -1.0 to 1.0, default = 0.0",
     default = 0.0)
 parser.add_argument(
+    "-con",
     "--contrast",
     type = np.float64,
     help = "contrast delta, 0.0 to 1.0, default = 0.0",
     default = 0.0)
 
 parser.add_argument(
+    "-hue",
     "--hue",
     type = np.float64,
     help = "hue angle delta, in degrees, default = 0.0",
     default = 0)
 parser.add_argument(
+    "-sat",
     "--saturation",
     type = np.float64,
     help ="saturation delta, -1.0 to 1.0, default = 0.0",
     default = 0)
 parser.add_argument(
+    "-phs",
     "--phase-skew",
     type = np.float64,
     help = "differential phase distortion, in degrees, default = 0.0",
     default = 0)
-# 7.5 IRE
 parser.add_argument(
+    "-blp",
     "--black-point",
     type = np.float64,
     help = "black point, in voltage units relative to blanking, default = 7.5/140.0 (7.5 IRE)",
     default =  7.5/140)
-# 100 IRE
 parser.add_argument(
+    "-whp",
     "--white-point",
     type = np.float64,
     help = "white point, in voltage units relative to blanking, default = 1.1V (luma level $20)")
 
-
-# NTSC 1953 primaries and illuminant C whitepoint
 parser.add_argument(
+    "-rfc",
+    "--reference-colorspace",
+    type = str,
+    help = "use colour.RGB_COLOURSPACES reference colorspace, default = \"NTSC (1953)\"",
+    default = 'NTSC (1953)')
+parser.add_argument(
+    "-dsc",
+    "--display-colorspace",
+    type = str,
+    help = "Use colour.RGB_COLOURSPACES display colorspace, default = \"ITU-R BT.709\"",
+    default = 'ITU-R BT.709')
+parser.add_argument(
+    "-cat",
+    "--chromatic-adaptation-transform",
+    type = str,
+    help = "chromatic adaptation transform method, default = \"XYZ Scaling\"",
+    default = 'XYZ Scaling')
+
+parser.add_argument(
+    "-rpr",
     "--reference-primaries-r",
     type = np.float64,
     nargs=2,
-    help = "reference color primary R, in CIE xy chromaticity coordinates, default = [0.670, 0.330]",
-    default = [0.670, 0.330])
+    help = "set custom reference color primary R, in CIE xy chromaticity coordinates")
 parser.add_argument(
+    "-rpg",
     "--reference-primaries-g",
     type = np.float64,
     nargs=2,
-    help = "reference color primary G, in CIE xy chromaticity coordinates, default = [0.210, 0.710]",
-    default = [0.210, 0.710])
+    help = "set custom reference color primary G, in CIE xy chromaticity coordinates")
 parser.add_argument(
+    "-rpb",
     "--reference-primaries-b",
     type = np.float64,
     nargs=2,
-    help = "reference color primary B, in CIE xy chromaticity coordinates, default = [0.140, 0.080]",
-    default = [0.140, 0.080])
+    help = "set custom reference color primary B, in CIE xy chromaticity coordinates")
 parser.add_argument(
+    "-rpw",
     "--reference-primaries-w",
     type = np.float64,
     nargs=2,
-    help = "reference whitepoint, in CIE xy chromaticity coordinates, default = [0.313, 0.329]",
-    default = [0.310, 0.316])
+    help = "set custom reference whitepoint, in CIE xy chromaticity coordinates")
 
-# Rec. 709/sRGB primaries and illuminant D65 whitepoint
 parser.add_argument(
+    "-dpr",
     "--display-primaries-r",
     type = np.float64,
     nargs=2,
-    help = "display color primary R, in CIE xy chromaticity coordinates, default = [0.640, 0.330]",
-    default = [0.640, 0.330])
+    help = "set custom display color primary R, in CIE xy chromaticity coordinates")
 parser.add_argument(
+    "-dpg",
     "--display-primaries-g",
     type = np.float64,
     nargs=2,
-    help = "display color primary G, in CIE xy chromaticity coordinates, default = [0.300, 0.600]",
-    default = [0.300, 0.600])
+    help = "set custom display color primary G, in CIE xy chromaticity coordinates")
 parser.add_argument(
+    "-dpb",
     "--display-primaries-b",
     type = np.float64,
     nargs=2,
-    help = "display color primary B, in CIE xy chromaticity coordinates, default = [0.150, 0.060]",
-    default = [0.150, 0.060])
+    help = "set custom display color primary B, in CIE xy chromaticity coordinates")
 parser.add_argument(
+    "-dpw",
     "--display-primaries-w",
     type = np.float64,
     nargs=2,
-    help = "display whitepoint, in CIE xy chromaticity coordinates, default = [0.3127, 0.3290]",
-    default = [0.3127, 0.3290])
+    help = "set custom display whitepoint, in CIE xy chromaticity coordinates")
 
 args = parser.parse_args()
 
@@ -164,49 +185,38 @@ RGB_to_YUV = np.array([
     [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
 ], np.float64)
 
-# special thanks to NewRisingSun for providing the matrix equations needed for
-# color correction!
-# reference:
-# Parker, N.W. (1966): An analysis of the necessary receiver decoder corrections
-#   for color receiver operation with nonstandard primaries. in: IEEE
-#   Transactions on Broadcast and Television Receivers 12 (1), 23-32.
+# special thanks to NewRisingSun for teaching me how chromatic adaptations work!
+# special thanks to _aitchFactor for pointing out that colour-science has
+# chromatic adaptation functions!
 
-# reference color profile, in CIE xy chromaticity coordinates
-s_profile = np.array([
-    args.reference_primaries_r,     # red
-    args.reference_primaries_g,     # green
-    args.reference_primaries_b,     # blue
-    args.reference_primaries_w      # white point
-], np.float64)
+# reference color profile colorspace
+s_colorspace = colour.RGB_COLOURSPACES[args.reference_colorspace]
+if (type(args.reference_primaries_r) != type(None)) and (type(args.reference_primaries_g) != type(None)) and (type(args.reference_primaries_b) != type(None)): 
+    s_colorspace.name = "custom primaries"
+    s_colorspace.primaries = np.array([
+        args.reference_primaries_r,
+        args.reference_primaries_g,
+        args.reference_primaries_b
+    ])
+if (type(args.reference_primaries_w) != type(None)):
+    s_colorspace.whitepoint = args.reference_primaries_w
+    s_colorspace.whitepoint_name = "custom whitepoint"
 
-# display color profile, in CIE xy chromaticity coordinates
-t_profile = np.array([
-    args.display_primaries_r,       # red
-    args.display_primaries_g,       # green
-    args.display_primaries_b,       # blue
-    args.display_primaries_w        # white point
-], np.float64)
+# display color profile colorspace
+t_colorspace = colour.RGB_COLOURSPACES[args.display_colorspace]
+if (type(args.display_primaries_r) != type(None)) and (type(args.display_primaries_g) != type(None)) and (type(args.display_primaries_b) != type(None)):
+    t_colorspace.name = "custom primaries"
+    t_colorspace.primaries = np.array([
+        args.display_primaries_r,
+        args.display_primaries_g,
+        args.display_primaries_b
+    ])
+if (type(args.display_primaries_w) != type(None)):
+    t_colorspace.whitepoint = args.display_primaries_w
+    t_colorspace.whitepoint_name = "custom whitepoint"
 
-s_XYZ = colour.xy_to_XYZ(s_profile)
-t_XYZ = colour.xy_to_XYZ(t_profile)
-
-s_w = np.matmul(s_XYZ[3], np.linalg.inv(np.delete(s_XYZ, 3, 0)))
-t_w = np.matmul(t_XYZ[3], np.linalg.inv(np.delete(t_XYZ, 3, 0)))
-
-s_RGB_to_XYZ = np.array([
-    np.delete(s_XYZ, 3, 0)[:,0]*s_w,
-    np.delete(s_XYZ, 3, 0)[:,1]*s_w,
-    np.delete(s_XYZ, 3, 0)[:,2]*s_w
-])
-
-t_RGB_to_XYZ = np.array([
-    np.delete(t_XYZ, 3, 0)[:,0]*t_w,
-    np.delete(t_XYZ, 3, 0)[:,1]*t_w,
-    np.delete(t_XYZ, 3, 0)[:,2]*t_w
-])
-
-# correction matrix for linear light
-correction_matrix = np.linalg.inv(np.matmul(np.linalg.inv(s_RGB_to_XYZ), t_RGB_to_XYZ))
+s_colorspace.name = "Reference colorspace: {}".format(s_colorspace.name)
+t_colorspace.name = "Display colorspace: {}".format(t_colorspace.name)
 
 # 111111------
 # 22222------2
@@ -266,13 +276,9 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = F
         RGB_sub_raw = np.split(RGB_raw, 8, 0)[emphasis]
 
     YUV_buffer_out = np.empty([luma_range, 16, 3], np.float64)
-    color_xy = np.empty([luma_range, 16, 2], np.float64)
-    color_xy_raw = np.empty([luma_range, 16, 2], np.float64)
     for luma in range(luma_range):
         for hue in range(16):
             YUV_buffer_out[luma, hue] = np.matmul(RGB_to_YUV, RGB_sub[luma, hue])
-            color_xy[luma, hue] = colour.XYZ_to_xy(np.matmul(t_RGB_to_XYZ, RGB_sub[luma, hue]))
-            color_xy_raw[luma, hue] = colour.XYZ_to_xy(np.matmul(s_RGB_to_XYZ, RGB_sub_raw[luma, hue]))
 
     color_theta = np.arctan2(YUV_buffer_out[:, :, 2], YUV_buffer_out[:, :, 1])
     color_r = YUV_buffer_out[:, :, 0]
@@ -298,25 +304,38 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = F
     ax1.scatter(color_theta, color_r, c=np.reshape(RGB_sub,(luma_range*16, 3)), marker=None, s=color_r*500, zorder=3)
 
     # CIE graph
-    colour.plotting.diagrams.plot_spectral_locus(
+    colour.plotting.plot_RGB_chromaticities_in_chromaticity_diagram_CIE1931(
+        RGB_sub_raw,
+        colourspace=s_colorspace,
+        show_whitepoints=False,
+        scatter_kwargs=dict(c=np.reshape(RGB_sub,(luma_range*16, 3)),alpha=0.1),
+        plot_kwargs=dict(color="gray"),
         figure=fig,
         axes=ax2,
         standalone=False,
-        method='CIE 1931',
+        show_diagram_colours=False,
+        show_spectral_locus=True,
         spectral_locus_colours='RGB',
-        aspect='equal',
+        transparent_background=False)
+    colour.plotting.plot_RGB_chromaticities_in_chromaticity_diagram_CIE1931(
+        RGB_sub,
+        colourspace=t_colorspace,
+        show_whitepoints=False,
+        scatter_kwargs=dict(c=np.reshape(RGB_sub,(luma_range*16, 3))),
+        plot_kwargs=dict(color="red"),
+        figure=fig,
+        axes=ax2,
+        standalone=False,
+        show_diagram_colours=False,
+        show_spectral_locus=True,
+        spectral_locus_colours='RGB',
         transparent_background=False)
     ax2.set_title("CIE 1931 chromaticity diagram")
     ax2.grid(which='both', color='grey', linewidth=0.5, linestyle='-', alpha=0.2)
-    ax2.fill(np.delete(s_profile, 3, 0)[:,0], np.delete(s_profile, 3, 0)[:,1], color="gray", linewidth=1, fill=False, label="reference colorspace")
-    ax2.fill(np.delete(t_profile, 3, 0)[:,0], np.delete(t_profile, 3, 0)[:,1], color="red", linewidth=1, fill=False, label="display colorspace")
-    ax2.legend(loc='upper right')
-    ax2.scatter(color_xy[:,:,0], color_xy[:,:,1], c=np.reshape(RGB_sub,(luma_range*16, 3)), zorder=3)
-    ax2.scatter(color_xy_raw[:,:,0], color_xy_raw[:,:,1], c=np.reshape(RGB_sub,(luma_range*16, 3)), alpha=0.1)
 
     fig.set_size_inches(16, 9)
     if (export_image):
-        plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120, facecolor='white')
+        plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120)
     else:
         plt.show()
     plt.close()
@@ -478,10 +497,11 @@ RGB_raw = RGB_buffer
 RGB_buffer = colour.models.oetf_inverse_BT709(RGB_buffer)
 
 # transform linear light
-for emphasis in range(8):
-    for luma in range(4):
-        for hue in range(16):
-            RGB_buffer[emphasis, luma, hue] = np.matmul(correction_matrix, RGB_buffer[emphasis, luma, hue])
+RGB_buffer[:, :, :] = colour.RGB_to_RGB(
+    RGB_buffer[:, :, :],
+    s_colorspace,
+    t_colorspace,
+    chromatic_adaptation_transform=args.chromatic_adaptation_transform)
 
 # convert linear light to signal
 RGB_buffer = colour.models.oetf_BT709(RGB_buffer)
