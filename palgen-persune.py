@@ -27,7 +27,7 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.2.2")
+    epilog="version 0.2.3")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
@@ -74,8 +74,7 @@ parser.add_argument(
 parser.add_argument(
     "--white-point",
     type = np.float64,
-    help = "white point, in voltage units relative to blanking, default = 100.0/140.0 (100 IRE)",
-    default = 100/140)
+    help = "white point, in voltage units relative to blanking, default = 1.1V (luma level $20)")
 
 
 # NTSC 1953 primaries and illuminant C whitepoint
@@ -243,12 +242,15 @@ colorburst_phase = 8
 colorburst_offset = colorburst_phase - 6 - 0.5
 
 # signal buffer normalization
-if args.setup_disable:
+if (args.setup_disable):
     signal_black_point = signal_table[1, 1, 0]
     signal_white_point = signal_table[3, 0, 0]
 else:
     signal_black_point = signal_table[1, 1, 0] + args.black_point
-    signal_white_point = signal_table[1, 1, 0] + args.white_point
+    if type(args.white_point) != type(None):
+        signal_white_point = signal_table[1, 1, 0] + args.white_point
+    else:
+        signal_white_point = signal_table[3, 0, 0]
 
 # used for image sequence plotting
 sequence_counter = 0
@@ -313,7 +315,7 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = F
     ax2.scatter(color_xy_raw[:,:,0], color_xy_raw[:,:,1], c=np.reshape(RGB_sub,(luma_range*16, 3)), alpha=0.1)
 
     fig.set_size_inches(16, 9)
-    if export_image:
+    if (export_image):
         plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120, facecolor='white')
     else:
         plt.show()
@@ -485,7 +487,7 @@ RGB_buffer = colour.models.oetf_BT709(RGB_buffer)
 
 # normalize RGB to 0.0-1.0
 # TODO: different clipping methods
-if args.normalize:
+if (args.normalize):
     if args.clip_black:
         np.clip(RGB_buffer, 0, None, out=RGB_buffer)
         np.clip(RGB_raw, 0, None, out=RGB_raw)
@@ -512,7 +514,7 @@ if (type(args.output) != type(None)):
     with open(args.output, mode="wb") as Palette_file:
         Palette_file.write(np.uint8(RGB_buffer * 0xFF))
 
-if args.render_png:
+if (args.render_png):
     for emphasis in range(8):
         NES_palette_plot(RGB_buffer, RGB_raw, emphasis, 4, False, True)
         if not (args.emphasis):
