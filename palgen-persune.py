@@ -27,11 +27,12 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.2.1")
+    epilog="version 0.2.2")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
 parser.add_argument("-n", "--normalize", action="store_true", help="normalize decoded colors within range of RGB (ignores black and white points, contrast, and brightness)")
+parser.add_argument("-c", "--clip-black", action="store_true", help="clip negative values in --normalize function")
 parser.add_argument("-w", "--waveforms", action="store_true", help="view composite waveforms")
 parser.add_argument("-p", "--phase-QAM", action="store_true", help="view QAM demodulation")
 parser.add_argument("-r", "--render-png", action="store_true", help="render views as .pngs in docs folder")
@@ -40,12 +41,12 @@ parser.add_argument("-s", "--setup-disable", action="store_true", help="normaliz
 parser.add_argument(
     "--brightness",
     type = np.float64,
-    help = "brightness, -1.0 to 1.0, default = 0.0",
+    help = "brightness delta, -1.0 to 1.0, default = 0.0",
     default = 0.0)
 parser.add_argument(
     "--contrast",
     type = np.float64,
-    help = "contrast, 0.0 to 1.0, default = 0.0",
+    help = "contrast delta, 0.0 to 1.0, default = 0.0",
     default = 0.0)
 
 parser.add_argument(
@@ -485,6 +486,9 @@ RGB_buffer = colour.models.oetf_BT709(RGB_buffer)
 # normalize RGB to 0.0-1.0
 # TODO: different clipping methods
 if args.normalize:
+    if args.clip_black:
+        np.clip(RGB_buffer, 0, None, out=RGB_buffer)
+        np.clip(RGB_raw, 0, None, out=RGB_raw)
     RGB_buffer -= np.amin(RGB_buffer)
     RGB_buffer /= (np.amax(RGB_buffer) - np.amin(RGB_buffer))
     RGB_raw -= np.amin(RGB_raw)
