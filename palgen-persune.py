@@ -336,6 +336,7 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = F
     fig.set_size_inches(16, 9)
     if (export_image):
         plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120)
+        plt.savefig("docs/palette sequence {0:03}.svg".format(emphasis), dpi=120)
     else:
         plt.show()
     plt.close()
@@ -400,6 +401,7 @@ for emphasis in range(8):
                 fig.set_size_inches(16, 9)
                 if args.render_png:
                     plt.savefig("docs/waveform sequence {0:03}.png".format(sequence_counter), dpi=120)
+                    plt.savefig("docs/waveform sequence {0:03}.svg".format(sequence_counter), dpi=120)
                 else:
                     plt.show()
                 plt.close()
@@ -456,7 +458,7 @@ for emphasis in range(8):
                 axY.set_ylabel("value")
                 axY.axis([0, 12, 0, range_axis])
                 axY.plot(x, voltage_buffer, 'o-', linewidth=0.7, label='composite signal')
-                axY.plot(x, np.full((12), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format((Y_avg - signal_black_point) / (signal_white_point - signal_black_point)))
+                axY.plot(x, np.full((12), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format(Y_avg))
                 axY.legend(loc='lower right')
                 
                 axU.set_title("U decoding")
@@ -483,6 +485,7 @@ for emphasis in range(8):
                 fig.set_size_inches(16, 9)
                 if args.render_png:
                     plt.savefig("docs/QAM sequence {0:03}.png".format(sequence_counter), dpi=120)
+                    plt.savefig("docs/QAM sequence {0:03}.svg".format(sequence_counter), dpi=120)
                 else:
                     plt.show()
                 plt.close()
