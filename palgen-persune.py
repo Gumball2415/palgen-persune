@@ -289,8 +289,11 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = F
     ax0 = fig.add_subplot(gs[1, 1])
     ax1 = fig.add_subplot(gs[0, 1], projection='polar')
     ax2 = fig.add_subplot(gs[:, 0])
-
-    fig.suptitle('NES palette')
+    
+    if (export_image):
+        fig.suptitle('NES palette (emphasis = {0:03b})'.format(emphasis))
+    else:
+        fig.suptitle('NES palette')
     fig.tight_layout()
 
     # colors
