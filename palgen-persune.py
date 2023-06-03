@@ -27,7 +27,7 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.3.0")
+    epilog="version 0.3.1")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
@@ -80,6 +80,12 @@ parser.add_argument(
     "--white-point",
     type = np.float64,
     help = "white point, in voltage units relative to blanking, default = 1.1V (luma level $20)")
+parser.add_argument(
+    "-cbr",
+    "--colorburst-reference",
+    type = np.uint,
+    help = "phase of colorburst reference. default is 8",
+    default = 8)
 
 parser.add_argument(
     "-rfc",
@@ -245,11 +251,10 @@ RGB_buffer = np.zeros([8,4,16,3], np.float64)
 # fix issue with colors
 offset = 1
 emphasis_offset = 1
-colorburst_phase = 8
 
 # due to the way the waveform is encoded, the hue is off by 15 degrees,
 # or 1/2 of a sample
-colorburst_offset = colorburst_phase - 6 - 0.5
+colorburst_offset = args.colorburst_reference - 6 - 0.5
 
 # signal buffer normalization
 if (args.setup_disable):
