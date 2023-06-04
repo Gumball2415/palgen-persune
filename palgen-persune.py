@@ -27,7 +27,7 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.3.1")
+    epilog="version 0.3.2")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
@@ -37,6 +37,7 @@ parser.add_argument("-w", "--waveforms", action="store_true", help="view composi
 parser.add_argument("-p", "--phase-QAM", action="store_true", help="view QAM demodulation")
 parser.add_argument("-r", "--render-png", action="store_true", help="render views as .pngs in docs folder")
 parser.add_argument("-s", "--setup-disable", action="store_true", help="normalize NES signal levels within luma range (ignores black and white points)")
+parser.add_argument("--html-hex", action="store_true", help="print HTML hex triplet values for each palette color")
 
 parser.add_argument(
     "-bri",
@@ -70,6 +71,18 @@ parser.add_argument(
     help = "differential phase distortion, in degrees, default = 0.0",
     default = 0)
 parser.add_argument(
+    "-aps",
+    "--antiemphasis-phase-skew",
+    type = np.float64,
+    help = "additonal phase distortion on colors $x2/$x6/$xA, in degrees, default = 0.0",
+    default = 0)
+parser.add_argument(
+    "-ela",
+    "--emphasis-luma-attenuation",
+    type = np.float64,
+    help = "additonal luma brightness on colors $x4/$x8/$xC, in voltage units, default = 0.0",
+    default = 0)
+parser.add_argument(
     "-blp",
     "--black-point",
     type = np.float64,
@@ -83,7 +96,7 @@ parser.add_argument(
 parser.add_argument(
     "-cbr",
     "--colorburst-reference",
-    type = np.uint,
+    type = np.float64,
     help = "phase of colorburst reference. default is 8",
     default = 8)
 
@@ -415,16 +428,16 @@ for emphasis in range(8):
                 plt.close()
 
             # normalize voltage
-
+            emphasis_row_luma = args.emphasis_luma_attenuation if (hue == 0x4 or hue == 0x8 or hue == 0xC) else 0
+            antiemphasis_row_chroma = args.antiemphasis_phase_skew if (hue == 0x2 or hue == 0x6 or hue == 0xA) else 0
             # decode voltage buffer to YUV
             # decode Y
-            YUV_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer)
-
+            YUV_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer) + emphasis_row_luma
             # decode U
             for t in range(12):
                 U_buffer[t] = voltage_buffer[t] * np.sin(
                     2 * np.pi / 12 * (t + colorburst_offset) +
-                    np.radians(args.hue) -
+                    np.radians(args.hue + antiemphasis_row_chroma) -
                     np.radians(args.phase_skew * luma))
             YUV_buffer[emphasis, luma, hue, 1] = np.average(U_buffer) * (args.saturation + 1)
 
@@ -432,7 +445,7 @@ for emphasis in range(8):
             for t in range(12):
                 V_buffer[t] = voltage_buffer[t] * np.cos(
                     2 * np.pi / 12 * (t + colorburst_offset) +
-                    np.radians(args.hue) -
+                    np.radians(args.hue + antiemphasis_row_chroma) -
                     np.radians(args.phase_skew * luma))
             YUV_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
 
@@ -542,7 +555,14 @@ else:
     RGB_raw = RGB_raw[0]
     luma_range = 4
 
-if (type(args.output) != type(None)):
+if (args.html_hex):
+    for luma in range(luma_range):
+        for hue in range(16):
+            print(
+                "#{0:02X}{1:02X}{2:02X},".format(
+                    np.uint8(RGB_buffer[luma, hue, 0] * 0xFF),
+                    np.uint8(RGB_buffer[luma, hue, 1] * 0xFF),
+                    np.uint8(RGB_buffer[luma, hue, 2] * 0xFF)))
     with open(args.output, mode="wb") as Palette_file:
         Palette_file.write(np.uint8(RGB_buffer * 0xFF))
 
