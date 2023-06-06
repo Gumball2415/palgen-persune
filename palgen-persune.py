@@ -27,7 +27,7 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.3.2")
+    epilog="version 0.3.3")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
@@ -93,6 +93,10 @@ parser.add_argument(
     "--white-point",
     type = np.float64,
     help = "white point, in voltage units relative to blanking, default = 1.1V (luma level $20)")
+parser.add_argument(
+    "-pal",
+    action="store_true",
+    help = "designates the colorburst reference to -U ± 45 degrees")
 parser.add_argument(
     "-cbr",
     "--colorburst-reference",
@@ -268,6 +272,8 @@ emphasis_offset = 1
 # due to the way the waveform is encoded, the hue is off by 15 degrees,
 # or 1/2 of a sample
 colorburst_offset = args.colorburst_reference - 6 - 0.5
+
+if (args.pal): colorburst_offset += 1.5
 
 # signal buffer normalization
 if (args.setup_disable):
@@ -555,16 +561,18 @@ else:
     RGB_raw = RGB_raw[0]
     luma_range = 4
 
+if (type(args.output) != type(None)):
+    with open(args.output, mode="wb") as Palette_file:
+        Palette_file.write(np.uint8(RGB_buffer * 0xFF))
 if (args.html_hex):
     for luma in range(luma_range):
         for hue in range(16):
             print(
-                "#{0:02X}{1:02X}{2:02X},".format(
+                "#{0:02X}{1:02X}{2:02X}".format(
                     np.uint8(RGB_buffer[luma, hue, 0] * 0xFF),
                     np.uint8(RGB_buffer[luma, hue, 1] * 0xFF),
                     np.uint8(RGB_buffer[luma, hue, 2] * 0xFF)))
-    with open(args.output, mode="wb") as Palette_file:
-        Palette_file.write(np.uint8(RGB_buffer * 0xFF))
+        print("")
 
 if (args.render_png):
     for emphasis in range(8):

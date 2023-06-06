@@ -17,13 +17,16 @@ This script requires `matplotlib` for graphs.
 
 ## Usage
 ```
-usage: palgen-persune.py [-h] [-o OUTPUT] [-e] [-d] [-n] [-c] [-w] [-p] [-r] [-s] [-bri BRIGHTNESS] [-con CONTRAST] [-hue HUE] [-sat SATURATION]
-                         [-phs PHASE_SKEW] [-blp BLACK_POINT] [-whp WHITE_POINT] [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
+usage: palgen-persune.py [-h] [-o OUTPUT] [-e] [-d] [-n] [-c] [-w] [-p] [-r] [-s] [--html-hex] [-bri BRIGHTNESS]
+                         [-con CONTRAST] [-hue HUE] [-sat SATURATION] [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
+                         [-ela EMPHASIS_LUMA_ATTENUATION] [-blp BLACK_POINT] [-whp WHITE_POINT] [-pal]
+                         [-cbr COLORBURST_REFERENCE] [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
                          [-cat CHROMATIC_ADAPTATION_TRANSFORM] [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
-                         [-rpg REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G] [-rpb REFERENCE_PRIMARIES_B REFERENCE_PRIMARIES_B]
-                         [-rpw REFERENCE_PRIMARIES_W REFERENCE_PRIMARIES_W] [-dpr DISPLAY_PRIMARIES_R DISPLAY_PRIMARIES_R]
-                         [-dpg DISPLAY_PRIMARIES_G DISPLAY_PRIMARIES_G] [-dpb DISPLAY_PRIMARIES_B DISPLAY_PRIMARIES_B]
-                         [-dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W]
+                         [-rpg REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G]
+                         [-rpb REFERENCE_PRIMARIES_B REFERENCE_PRIMARIES_B]
+                         [-rpw REFERENCE_PRIMARIES_W REFERENCE_PRIMARIES_W]
+                         [-dpr DISPLAY_PRIMARIES_R DISPLAY_PRIMARIES_R] [-dpg DISPLAY_PRIMARIES_G DISPLAY_PRIMARIES_G]
+                         [-dpb DISPLAY_PRIMARIES_B DISPLAY_PRIMARIES_B] [-dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W]
 
 yet another NES palette generator
 
@@ -33,12 +36,14 @@ options:
                         .pal file output
   -e, --emphasis        add emphasis entries
   -d, --debug           debug messages
-  -n, --normalize       normalize decoded colors within range of RGB (ignores black and white points, contrast, and brightness)
+  -n, --normalize       normalize decoded colors within range of RGB (ignores black and white points, contrast, and
+                        brightness)
   -c, --clip-black      clip negative values in --normalize function
   -w, --waveforms       view composite waveforms
   -p, --phase-QAM       view QAM demodulation
   -r, --render-png      render views as .pngs in docs folder
   -s, --setup-disable   normalize NES signal levels within luma range (ignores black and white points)
+  --html-hex            print HTML hex triplet values for each palette color
   -bri BRIGHTNESS, --brightness BRIGHTNESS
                         brightness delta, -1.0 to 1.0, default = 0.0
   -con CONTRAST, --contrast CONTRAST
@@ -48,10 +53,17 @@ options:
                         saturation delta, -1.0 to 1.0, default = 0.0
   -phs PHASE_SKEW, --phase-skew PHASE_SKEW
                         differential phase distortion, in degrees, default = 0.0
+  -aps ANTIEMPHASIS_PHASE_SKEW, --antiemphasis-phase-skew ANTIEMPHASIS_PHASE_SKEW
+                        additonal phase distortion on colors $x2/$x6/$xA, in degrees, default = 0.0
+  -ela EMPHASIS_LUMA_ATTENUATION, --emphasis-luma-attenuation EMPHASIS_LUMA_ATTENUATION
+                        additonal luma brightness on colors $x4/$x8/$xC, in voltage units, default = 0.0
   -blp BLACK_POINT, --black-point BLACK_POINT
                         black point, in voltage units relative to blanking, default = 7.5/140.0 (7.5 IRE)
   -whp WHITE_POINT, --white-point WHITE_POINT
                         white point, in voltage units relative to blanking, default = 1.1V (luma level $20)
+  -pal                  designates the colorburst reference to -U ± 45 degrees
+  -cbr COLORBURST_REFERENCE, --colorburst-reference COLORBURST_REFERENCE
+                        phase of colorburst reference. default is 8
   -rfc REFERENCE_COLORSPACE, --reference-colorspace REFERENCE_COLORSPACE
                         use colour.RGB_COLOURSPACES reference colorspace, default = "NTSC (1953)"
   -dsc DISPLAY_COLORSPACE, --display-colorspace DISPLAY_COLORSPACE
@@ -75,7 +87,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.3.0
+version 0.3.3
 ```
 
 ## License
