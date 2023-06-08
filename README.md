@@ -17,11 +17,12 @@ This script requires `matplotlib` for graphs.
 
 ## Usage
 ```
-usage: palgen-persune.py [-h] [-o OUTPUT] [-e] [-d] [-n] [-c] [-w] [-p] [-r] [-s] [--html-hex] [-bri BRIGHTNESS]
-                         [-con CONTRAST] [-hue HUE] [-sat SATURATION] [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
-                         [-ela EMPHASIS_LUMA_ATTENUATION] [-blp BLACK_POINT] [-whp WHITE_POINT] [-pal]
-                         [-cbr COLORBURST_REFERENCE] [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
-                         [-cat CHROMATIC_ADAPTATION_TRANSFORM] [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
+usage: palgen-persune.py [-h] [-o OUTPUT] [-e] [-d] [-n] [-c] [-w] [-p] [-r] [-s] [--html-hex] [--wiki-table]
+                         [-bri BRIGHTNESS] [-con CONTRAST] [-hue HUE] [-sat SATURATION] [-phs PHASE_SKEW]
+                         [-aps ANTIEMPHASIS_PHASE_SKEW] [-ela EMPHASIS_LUMA_ATTENUATION] [-blp BLACK_POINT]
+                         [-whp WHITE_POINT] [-pal] [-cbr COLORBURST_REFERENCE] [-rfc REFERENCE_COLORSPACE]
+                         [-dsc DISPLAY_COLORSPACE] [-cat CHROMATIC_ADAPTATION_TRANSFORM]
+                         [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
                          [-rpg REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G]
                          [-rpb REFERENCE_PRIMARIES_B REFERENCE_PRIMARIES_B]
                          [-rpw REFERENCE_PRIMARIES_W REFERENCE_PRIMARIES_W]
@@ -44,6 +45,7 @@ options:
   -r, --render-png      render views as .pngs in docs folder
   -s, --setup-disable   normalize NES signal levels within luma range (ignores black and white points)
   --html-hex            print HTML hex triplet values for each palette color
+  --wiki-table          print MediaWiki formatted color table
   -bri BRIGHTNESS, --brightness BRIGHTNESS
                         brightness delta, -1.0 to 1.0, default = 0.0
   -con CONTRAST, --contrast CONTRAST
@@ -87,7 +89,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.3.3
+version 0.3.4
 ```
 
 ## License
