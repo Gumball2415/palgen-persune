@@ -38,6 +38,7 @@ parser.add_argument("-p", "--phase-QAM", action="store_true", help="view QAM dem
 parser.add_argument("-r", "--render-png", action="store_true", help="render views as .pngs in docs folder")
 parser.add_argument("-s", "--setup-disable", action="store_true", help="normalize NES signal levels within luma range (ignores black and white points)")
 parser.add_argument("--html-hex", action="store_true", help="print HTML hex triplet values for each palette color")
+parser.add_argument("--wiki-table", action="store_true", help="print MediaWiki formatted color table")
 
 parser.add_argument(
     "-bri",
@@ -213,30 +214,50 @@ RGB_to_YUV = np.array([
 # chromatic adaptation functions!
 
 # reference color profile colorspace
-s_colorspace = colour.RGB_COLOURSPACES[args.reference_colorspace].copy()
-if (type(args.reference_primaries_r) != type(None)) and (type(args.reference_primaries_g) != type(None)) and (type(args.reference_primaries_b) != type(None)): 
+s_colorspace = colour.RGB_Colourspace(
+    colour.RGB_COLOURSPACES[args.reference_colorspace].name,
+    colour.RGB_COLOURSPACES[args.reference_colorspace].primaries,
+    colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint)
+if (args.reference_primaries_r is not None and args.reference_primaries_g is not None and args.reference_primaries_b is not None): 
     s_colorspace.name = "custom primaries"
     s_colorspace.primaries = np.array([
         args.reference_primaries_r,
         args.reference_primaries_g,
         args.reference_primaries_b
     ])
-if (type(args.reference_primaries_w) != type(None)):
+else:
+    s_colorspace.name = colour.RGB_COLOURSPACES[args.reference_colorspace].name
+    s_colorspace.primaries = colour.RGB_COLOURSPACES[args.reference_colorspace].primaries
+
+if (args.reference_primaries_w is not None):
     s_colorspace.whitepoint = args.reference_primaries_w
     s_colorspace.whitepoint_name = "custom whitepoint"
+else:
+    s_colorspace.whitepoint_name = colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint_name
+    s_colorspace.whitepoint = colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint
 
 # display color profile colorspace
-t_colorspace = colour.RGB_COLOURSPACES[args.display_colorspace].copy()
-if (type(args.display_primaries_r) != type(None)) and (type(args.display_primaries_g) != type(None)) and (type(args.display_primaries_b) != type(None)):
+t_colorspace = colour.RGB_Colourspace(
+    colour.RGB_COLOURSPACES[args.display_colorspace].name,
+    colour.RGB_COLOURSPACES[args.display_colorspace].primaries,
+    colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint)
+if (args.display_primaries_r is not None and args.display_primaries_g is not None and args.display_primaries_b is not None): 
     t_colorspace.name = "custom primaries"
     t_colorspace.primaries = np.array([
         args.display_primaries_r,
         args.display_primaries_g,
         args.display_primaries_b
     ])
-if (type(args.display_primaries_w) != type(None)):
+else:
+    t_colorspace.name = colour.RGB_COLOURSPACES[args.display_colorspace].name
+    t_colorspace.primaries = colour.RGB_COLOURSPACES[args.display_colorspace].primaries
+
+if (args.display_primaries_w is not None):
     t_colorspace.whitepoint = args.display_primaries_w
     t_colorspace.whitepoint_name = "custom whitepoint"
+else:
+    t_colorspace.whitepoint_name = colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint_name
+    t_colorspace.whitepoint = colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint
 
 s_colorspace.name = "Reference colorspace: {}".format(s_colorspace.name)
 t_colorspace.name = "Display colorspace: {}".format(t_colorspace.name)
@@ -281,7 +302,7 @@ if (args.setup_disable):
     signal_white_point = signal_table[3, 0, 0]
 else:
     signal_black_point = signal_table[1, 1, 0] + args.black_point
-    if type(args.white_point) != type(None):
+    if (args.white_point is not None):
         signal_white_point = signal_table[1, 1, 0] + args.white_point
     else:
         signal_white_point = signal_table[3, 0, 0]
@@ -561,7 +582,7 @@ else:
     RGB_raw = RGB_raw[0]
     luma_range = 4
 
-if (type(args.output) != type(None)):
+if (args.output is not None):
     with open(args.output, mode="wb") as Palette_file:
         Palette_file.write(np.uint8(RGB_buffer * 0xFF))
 if (args.html_hex):
@@ -573,6 +594,22 @@ if (args.html_hex):
                     np.uint8(RGB_buffer[luma, hue, 1] * 0xFF),
                     np.uint8(RGB_buffer[luma, hue, 2] * 0xFF)))
         print("")
+if (args.wiki_table):
+    print("{|class=\"wikitable\"")
+    for luma in range(4):
+        print("|-")
+        for hue in range(16):
+            color_r = int(RGB_buffer[luma, hue, 0] * 0xFF)
+            color_g = int(RGB_buffer[luma, hue, 1] * 0xFF)
+            color_b = int(RGB_buffer[luma, hue, 2] * 0xFF)
+            contrast = 0xFFF if ((color_r*299 + color_g*587 + color_b*114) <= 127500) else 0x000
+            print("|style=\"border:0px;background-color:#{0:02X}{1:02X}{2:02X};width:32px;height:32px;color:#{3:03x};text-align:center\"|${4:02X}".format(
+                color_r,
+                color_g,
+                color_b,
+                contrast,
+                ((luma << 4) + hue)))
+    print("|}")
 
 if (args.render_png):
     for emphasis in range(8):
