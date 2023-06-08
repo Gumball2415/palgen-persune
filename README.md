@@ -90,7 +90,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.3.5
+version 0.3.6
 ```
 
 ## License
