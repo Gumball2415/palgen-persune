@@ -17,11 +17,11 @@ This script requires `matplotlib` for graphs.
 
 ## Usage
 ```
-usage: palgen-persune.py [-h] [-o OUTPUT] [-e] [-d] [-n] [-c] [-w] [-p] [-r] [-s] [--html-hex] [--wiki-table]
-                         [-bri BRIGHTNESS] [-con CONTRAST] [-hue HUE] [-sat SATURATION] [-phs PHASE_SKEW]
-                         [-aps ANTIEMPHASIS_PHASE_SKEW] [-ela EMPHASIS_LUMA_ATTENUATION] [-blp BLACK_POINT]
-                         [-whp WHITE_POINT] [-pal] [-cbr COLORBURST_REFERENCE] [-rfc REFERENCE_COLORSPACE]
-                         [-dsc DISPLAY_COLORSPACE] [-cat CHROMATIC_ADAPTATION_TRANSFORM]
+usage: palgen-persune.py [-h] [--skip-plot] [-o OUTPUT] [-e] [-d] [-n] [-c] [-w] [-p] [-r] [-s] [--html-hex]
+                         [--wiki-table] [-bri BRIGHTNESS] [-con CONTRAST] [-hue HUE] [-sat SATURATION]
+                         [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW] [-ela EMPHASIS_LUMA_ATTENUATION]
+                         [-blp BLACK_POINT] [-whp WHITE_POINT] [-pal] [-cbr COLORBURST_REFERENCE]
+                         [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE] [-cat CHROMATIC_ADAPTATION_TRANSFORM]
                          [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
                          [-rpg REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G]
                          [-rpb REFERENCE_PRIMARIES_B REFERENCE_PRIMARIES_B]
@@ -33,6 +33,7 @@ yet another NES palette generator
 
 options:
   -h, --help            show this help message and exit
+  --skip-plot           skips showing the palette plot
   -o OUTPUT, --output OUTPUT
                         .pal file output
   -e, --emphasis        add emphasis entries
@@ -89,7 +90,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.3.4
+version 0.3.5
 ```
 
 ## License

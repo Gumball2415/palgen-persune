@@ -1,6 +1,7 @@
 cd ..
-palgen-persune.py -p -w -r
-palgen-persune.py -e -r
+"make palettes.bat"
+palgen-persune.py --skip-plot -p -w -r
+palgen-persune.py --skip-plot -e -r
 palgen-persune.py -h
 pause
 cd docs

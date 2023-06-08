@@ -27,7 +27,8 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.3.4")
+    epilog="version 0.3.5")
+parser.add_argument("--skip-plot", action="store_true", help="skips showing the palette plot")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
 parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
@@ -313,6 +314,8 @@ sequence_counter = 0
 # figure plotting for palette preview
 # TODO: interactivity
 def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = False, export_image = False):
+    if (args.skip_plot and not export_image):
+        return
     if all_emphasis or not args.emphasis:
         RGB_sub = RGB_buffer
         RGB_sub_raw = RGB_raw
@@ -584,24 +587,24 @@ else:
 
 if (args.output is not None):
     with open(args.output, mode="wb") as Palette_file:
-        Palette_file.write(np.uint8(RGB_buffer * 0xFF))
+        Palette_file.write(np.uint8((RGB_buffer * 0xFF) + 0.5))
 if (args.html_hex):
     for luma in range(luma_range):
         for hue in range(16):
             print(
                 "#{0:02X}{1:02X}{2:02X}".format(
-                    np.uint8(RGB_buffer[luma, hue, 0] * 0xFF),
-                    np.uint8(RGB_buffer[luma, hue, 1] * 0xFF),
-                    np.uint8(RGB_buffer[luma, hue, 2] * 0xFF)))
+                    np.uint8((RGB_buffer[luma, hue, 0] * 0xFF) + 0.5),
+                    np.uint8((RGB_buffer[luma, hue, 1] * 0xFF) + 0.5),
+                    np.uint8((RGB_buffer[luma, hue, 2] * 0xFF) + 0.5)))
         print("")
 if (args.wiki_table):
     print("{|class=\"wikitable\"")
     for luma in range(4):
         print("|-")
         for hue in range(16):
-            color_r = int(RGB_buffer[luma, hue, 0] * 0xFF)
-            color_g = int(RGB_buffer[luma, hue, 1] * 0xFF)
-            color_b = int(RGB_buffer[luma, hue, 2] * 0xFF)
+            color_r = int((RGB_buffer[luma, hue, 0] * 0xFF) + 0.5)
+            color_g = int((RGB_buffer[luma, hue, 1] * 0xFF) + 0.5)
+            color_b = int((RGB_buffer[luma, hue, 2] * 0xFF) + 0.5)
             contrast = 0xFFF if ((color_r*299 + color_g*587 + color_b*114) <= 127500) else 0x000
             print("|style=\"border:0px;background-color:#{0:02X}{1:02X}{2:02X};width:32px;height:32px;color:#{3:03x};text-align:center\"|${4:02X}".format(
                 color_r,
