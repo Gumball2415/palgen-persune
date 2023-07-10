@@ -27,7 +27,7 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.3.6")
+    epilog="version 0.3.7")
 parser.add_argument("--skip-plot", action="store_true", help="skips showing the palette plot")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
@@ -124,6 +124,11 @@ parser.add_argument(
     type = str,
     help = "chromatic adaptation transform method, default = \"XYZ Scaling\"",
     default = 'XYZ Scaling')
+parser.add_argument(
+    "-ict",
+    "--inverse-chromatic-transform",
+    action="store_true",
+    help = "invert direction of chromatic adaptation transform method (from display to reference)")
 
 parser.add_argument(
     "-rpr",
@@ -551,11 +556,18 @@ RGB_raw = RGB_buffer
 RGB_buffer = colour.models.oetf_inverse_BT709(RGB_buffer)
 
 # transform linear light
-RGB_buffer[:, :, :] = colour.RGB_to_RGB(
-    RGB_buffer[:, :, :],
-    s_colorspace,
-    t_colorspace,
-    chromatic_adaptation_transform=args.chromatic_adaptation_transform)
+if (args.inverse_chromatic_transform):
+    RGB_buffer[:, :, :] = colour.RGB_to_RGB(
+        RGB_buffer[:, :, :],
+        t_colorspace,
+        s_colorspace,
+        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
+else:
+    RGB_buffer[:, :, :] = colour.RGB_to_RGB(
+        RGB_buffer[:, :, :],
+        s_colorspace,
+        t_colorspace,
+        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
 
 # convert linear light to signal
 RGB_buffer = colour.models.oetf_BT709(RGB_buffer)

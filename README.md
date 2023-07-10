@@ -22,7 +22,7 @@ usage: palgen-persune.py [-h] [--skip-plot] [-o OUTPUT] [-e] [-d] [-n] [-c] [-w]
                          [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW] [-ela EMPHASIS_LUMA_ATTENUATION]
                          [-blp BLACK_POINT] [-whp WHITE_POINT] [-pal] [-cbr COLORBURST_REFERENCE]
                          [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE] [-cat CHROMATIC_ADAPTATION_TRANSFORM]
-                         [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
+                         [-ict] [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
                          [-rpg REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G]
                          [-rpb REFERENCE_PRIMARIES_B REFERENCE_PRIMARIES_B]
                          [-rpw REFERENCE_PRIMARIES_W REFERENCE_PRIMARIES_W]
@@ -73,6 +73,8 @@ options:
                         Use colour.RGB_COLOURSPACES display colorspace, default = "ITU-R BT.709"
   -cat CHROMATIC_ADAPTATION_TRANSFORM, --chromatic-adaptation-transform CHROMATIC_ADAPTATION_TRANSFORM
                         chromatic adaptation transform method, default = "XYZ Scaling"
+  -ict, --inverse-chromatic-transform
+                        invert direction of chromatic adaptation transform method (from display to reference)
   -rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R, --reference-primaries-r REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R
                         set custom reference color primary R, in CIE xy chromaticity coordinates
   -rpg REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G, --reference-primaries-g REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G
@@ -90,7 +92,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.3.6
+version 0.3.7
 ```
 
 ## License
