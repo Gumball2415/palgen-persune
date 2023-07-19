@@ -27,7 +27,7 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.3.7")
+    epilog="version 0.4.0")
 parser.add_argument("--skip-plot", action="store_true", help="skips showing the palette plot")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
@@ -473,7 +473,7 @@ for emphasis in range(8):
                 U_buffer[t] = voltage_buffer[t] * np.sin(
                     2 * np.pi / 12 * (t + colorburst_offset) +
                     np.radians(args.hue + antiemphasis_row_chroma) -
-                    np.radians(args.phase_skew * luma))
+                    np.radians(args.phase_skew * luma)) * 2
             YUV_buffer[emphasis, luma, hue, 1] = np.average(U_buffer) * (args.saturation + 1)
 
             # decode V
@@ -481,7 +481,7 @@ for emphasis in range(8):
                 V_buffer[t] = voltage_buffer[t] * np.cos(
                     2 * np.pi / 12 * (t + colorburst_offset) +
                     np.radians(args.hue + antiemphasis_row_chroma) -
-                    np.radians(args.phase_skew * luma))
+                    np.radians(args.phase_skew * luma)) * 2
             YUV_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
 
             # decode YUV to RGB
@@ -519,21 +519,21 @@ for emphasis in range(8):
                 
                 axU.set_title("U decoding")
                 axU.set_ylabel("value")
-                axU.axis([0, 12, -1*range_axis, range_axis])
+                axU.axis([0, 12, -2*range_axis, 2*range_axis])
                 axU.plot(x, U_buffer, 'o-', linewidth=0.7, label='demodulated U signal')
                 axU.plot(x, np.full((12), U_avg), 'o-', linewidth=0.7, label='U value = {:< z.3f}'.format(U_avg))
                 axU.legend(loc='lower right')
                 
                 axV.set_title("V decoding")
                 axV.set_ylabel("value")
-                axV.axis([0, 12, -1*range_axis, range_axis])
+                axV.axis([0, 12, -2*range_axis, 2*range_axis])
                 axV.plot(x, V_buffer, 'o-', linewidth=0.7, label='demodulated V signal')
                 axV.plot(x, np.full((12), V_avg), 'o-', linewidth=0.7, label='V value = {:< z.3f}'.format(V_avg))
                 axV.legend(loc='lower right')
                 
                 color_theta = np.arctan2(V_avg, U_avg)
                 color_r =  np.sqrt(U_avg**2 + V_avg**2)
-                ax1.axis([0, 2*np.pi, 0, 0.3])
+                ax1.axis([0, 2*np.pi, 0, 0.6])
                 ax1.set_title("Phasor plot")
                 ax1.scatter(color_theta, color_r)
                 ax1.vlines(color_theta, 0, color_r)
