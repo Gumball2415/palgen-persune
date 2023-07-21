@@ -27,7 +27,7 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.4.0")
+    epilog="version 0.5.0")
 parser.add_argument("--skip-plot", action="store_true", help="skips showing the palette plot")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
@@ -110,8 +110,8 @@ parser.add_argument(
     "-rfc",
     "--reference-colorspace",
     type = str,
-    help = "use colour.RGB_COLOURSPACES reference colorspace, default = \"NTSC (1953)\"",
-    default = 'NTSC (1953)')
+    help = "use colour.RGB_COLOURSPACES reference colorspace, default = \"ITU-R BT.709\"",
+    default = 'ITU-R BT.709')
 parser.add_argument(
     "-dsc",
     "--display-colorspace",
@@ -559,14 +559,14 @@ RGB_buffer = colour.models.oetf_inverse_BT709(RGB_buffer)
 if (args.inverse_chromatic_transform):
     RGB_buffer[:, :, :] = colour.RGB_to_RGB(
         RGB_buffer[:, :, :],
-        t_colorspace,
         s_colorspace,
+        t_colorspace,
         chromatic_adaptation_transform=args.chromatic_adaptation_transform)
 else:
     RGB_buffer[:, :, :] = colour.RGB_to_RGB(
         RGB_buffer[:, :, :],
-        s_colorspace,
         t_colorspace,
+        s_colorspace,
         chromatic_adaptation_transform=args.chromatic_adaptation_transform)
 
 # convert linear light to signal

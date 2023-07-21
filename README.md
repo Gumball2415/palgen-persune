@@ -68,7 +68,7 @@ options:
   -cbr COLORBURST_REFERENCE, --colorburst-reference COLORBURST_REFERENCE
                         phase of colorburst reference. default is 8
   -rfc REFERENCE_COLORSPACE, --reference-colorspace REFERENCE_COLORSPACE
-                        use colour.RGB_COLOURSPACES reference colorspace, default = "NTSC (1953)"
+                        use colour.RGB_COLOURSPACES reference colorspace, default = "ITU-R BT.709"
   -dsc DISPLAY_COLORSPACE, --display-colorspace DISPLAY_COLORSPACE
                         Use colour.RGB_COLOURSPACES display colorspace, default = "ITU-R BT.709"
   -cat CHROMATIC_ADAPTATION_TRANSFORM, --chromatic-adaptation-transform CHROMATIC_ADAPTATION_TRANSFORM
@@ -92,7 +92,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.4.0
+version 0.5.0
 ```
 
 ## License
