@@ -27,7 +27,7 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.5.0")
+    epilog="version 0.5.1")
 parser.add_argument("--skip-plot", action="store_true", help="skips showing the palette plot")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
@@ -205,8 +205,8 @@ signal_table = np.array([
 ], np.float64)
 
 # B-Y and R-Y reduction factors
-BY_rf = 1/2.03
-RY_rf = 1/1.14
+BY_rf = 0.492111
+RY_rf = 0.877283
 
 # derived from the NTSC base matrix of luminance and color-difference
 RGB_to_YUV = np.array([
