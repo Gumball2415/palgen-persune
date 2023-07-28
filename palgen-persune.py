@@ -27,7 +27,7 @@ import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.5.1")
+    epilog="version 0.5.2")
 parser.add_argument("--skip-plot", action="store_true", help="skips showing the palette plot")
 parser.add_argument("-o", "--output", type=str, help=".pal file output")
 parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
@@ -40,6 +40,7 @@ parser.add_argument("-r", "--render-png", action="store_true", help="render view
 parser.add_argument("-s", "--setup-disable", action="store_true", help="normalize NES signal levels within luma range (ignores black and white points)")
 parser.add_argument("--html-hex", action="store_true", help="print HTML hex triplet values for each palette color")
 parser.add_argument("--wiki-table", action="store_true", help="print MediaWiki formatted color table")
+parser.add_argument("--c-table", action="store_true", help="print an array of hex formatted c-style unsigned integers")
 
 parser.add_argument(
     "-bri",
@@ -627,6 +628,15 @@ if (args.wiki_table):
                 contrast,
                 ((luma << 4) + hue)))
     print("|}")
+if (args.c_table):
+    for luma in range(luma_range):
+        for hue in range(16):
+            print(
+                "0x{0:02x}, 0x{1:02x}, 0x{2:02x},".format(
+                    np.uint8(np.around(RGB_buffer[luma, hue, 0] * 0xFF)),
+                    np.uint8(np.around(RGB_buffer[luma, hue, 1] * 0xFF)),
+                    np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF))))
+        print("")
 
 if (args.render_png):
     for emphasis in range(8):

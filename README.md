@@ -18,7 +18,7 @@ This script requires `matplotlib` for graphs.
 ## Usage
 ```
 usage: palgen-persune.py [-h] [--skip-plot] [-o OUTPUT] [-e] [-d] [-n] [-c] [-w] [-p] [-r] [-s] [--html-hex]
-                         [--wiki-table] [-bri BRIGHTNESS] [-con CONTRAST] [-hue HUE] [-sat SATURATION]
+                         [--wiki-table] [--c-table] [-bri BRIGHTNESS] [-con CONTRAST] [-hue HUE] [-sat SATURATION]
                          [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW] [-ela EMPHASIS_LUMA_ATTENUATION]
                          [-blp BLACK_POINT] [-whp WHITE_POINT] [-pal] [-cbr COLORBURST_REFERENCE]
                          [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE] [-cat CHROMATIC_ADAPTATION_TRANSFORM]
@@ -47,6 +47,7 @@ options:
   -s, --setup-disable   normalize NES signal levels within luma range (ignores black and white points)
   --html-hex            print HTML hex triplet values for each palette color
   --wiki-table          print MediaWiki formatted color table
+  --c-table             print an array of hex formatted c-style unsigned integers
   -bri BRIGHTNESS, --brightness BRIGHTNESS
                         brightness delta, -1.0 to 1.0, default = 0.0
   -con CONTRAST, --contrast CONTRAST
@@ -92,7 +93,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.5.1
+version 0.5.2
 ```
 
 ## License
