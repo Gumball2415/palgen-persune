@@ -1,9 +1,10 @@
 # Palette Generator
 
 yet another NES palette generator, in Python
-<img src="docs/palette sequence.gif">
-<img src="docs/waveform sequence.gif">
-<img src="docs/QAM sequence.gif">
+<img src="docs/palette preview.png">
+<img src="docs/waveform phase.gif">
+<img src="docs/QAM phase.gif">
+<img src="docs/palette preview emphasis.gif">
 
 something to note: there _is_ no one true NES palette, but this generator can pretty much approach colors that looks good enough. feel free to adjust to taste!
 
@@ -17,12 +18,13 @@ This script requires `matplotlib` for graphs.
 
 ## Usage
 ```
-usage: palgen-persune.py [-h] [--skip-plot] [-o OUTPUT] [-e] [-d] [-n] [-c] [-w] [-p] [-r] [-s] [--html-hex]
-                         [--wiki-table] [--c-table] [-bri BRIGHTNESS] [-con CONTRAST] [-hue HUE] [-sat SATURATION]
-                         [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW] [-ela EMPHASIS_LUMA_ATTENUATION]
-                         [-blp BLACK_POINT] [-whp WHITE_POINT] [-pal] [-cbr COLORBURST_REFERENCE]
-                         [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE] [-cat CHROMATIC_ADAPTATION_TRANSFORM]
-                         [-ict] [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
+usage: palgen-persune.py [-h] [--html-hex] [--wiki-table] [--c-table] [-d] [-r] [-w] [-p] [--skip-plot] [-o OUTPUT]
+                         [-e] [-t TEST_IMAGE] [-n NORMALIZE] [-c CLIP] [-s] [-pal] [-cbr COLORBURST_REFERENCE]
+                         [-bri BRIGHTNESS] [-con CONTRAST] [-hue HUE] [-sat SATURATION] [-blp BLACK_POINT]
+                         [-whp WHITE_POINT] [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
+                         [-ela EMPHASIS_LUMA_ATTENUATION] [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
+                         [-cat CHROMATIC_ADAPTATION_TRANSFORM] [-ict]
+                         [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
                          [-rpg REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G]
                          [-rpb REFERENCE_PRIMARIES_B REFERENCE_PRIMARIES_B]
                          [-rpw REFERENCE_PRIMARIES_W REFERENCE_PRIMARIES_W]
@@ -33,21 +35,29 @@ yet another NES palette generator
 
 options:
   -h, --help            show this help message and exit
-  --skip-plot           skips showing the palette plot
-  -o OUTPUT, --output OUTPUT
-                        .pal file output
-  -e, --emphasis        add emphasis entries
-  -d, --debug           debug messages
-  -n, --normalize       normalize decoded colors within range of RGB (ignores black and white points, contrast, and
-                        brightness)
-  -c, --clip-black      clip negative values in --normalize function
-  -w, --waveforms       view composite waveforms
-  -p, --phase-QAM       view QAM demodulation
-  -r, --render-png      render views as .pngs in docs folder
-  -s, --setup-disable   normalize NES signal levels within luma range (ignores black and white points)
   --html-hex            print HTML hex triplet values for each palette color
   --wiki-table          print MediaWiki formatted color table
   --c-table             print an array of hex formatted c-style unsigned integers
+  -d, --debug           debug messages
+  -r, --render-img      render views and diagrams as .pngs and .svgs in docs folder
+  -w, --waveforms       view composite waveforms
+  -p, --phase-QAM       view QAM demodulation
+  --skip-plot           skips showing the palette plot
+  -o OUTPUT, --output OUTPUT
+                        .pal file output
+  -e, --emphasis        include emphasis entries
+  -t TEST_IMAGE, --test-image TEST_IMAGE
+                        use 256x240 uint16 raw binary PPU frame buffer for palette proofreading
+  -n NORMALIZE, --normalize NORMALIZE
+                        0 = normalize all colors within gamut (ignores black and white points, contrast, and
+                        brightness), 1 = same as first, but clip negative values
+  -c CLIP, --clip CLIP  clips out-of-gamut RGB colors. 0 = any of the RGB channels are clipped to max (default), 1 =
+                        color is darkened until RGB channels are in range, 2 = color is desaturated until RGB channels
+                        are in range
+  -s, --setup-disable   normalize NES signal levels within luma range (ignores black and white points)
+  -pal                  designates the colorburst reference to -U ± 45 degrees
+  -cbr COLORBURST_REFERENCE, --colorburst-reference COLORBURST_REFERENCE
+                        phase of colorburst reference. default is 8
   -bri BRIGHTNESS, --brightness BRIGHTNESS
                         brightness delta, -1.0 to 1.0, default = 0.0
   -con CONTRAST, --contrast CONTRAST
@@ -55,19 +65,16 @@ options:
   -hue HUE, --hue HUE   hue angle delta, in degrees, default = 0.0
   -sat SATURATION, --saturation SATURATION
                         saturation delta, -1.0 to 1.0, default = 0.0
+  -blp BLACK_POINT, --black-point BLACK_POINT
+                        black point, in voltage units relative to blanking, default = 7.5/140.0 (7.5 IRE)
+  -whp WHITE_POINT, --white-point WHITE_POINT
+                        white point, in voltage units relative to blanking, default = 1.1V (luma level $20)
   -phs PHASE_SKEW, --phase-skew PHASE_SKEW
                         differential phase distortion, in degrees, default = 0.0
   -aps ANTIEMPHASIS_PHASE_SKEW, --antiemphasis-phase-skew ANTIEMPHASIS_PHASE_SKEW
                         additonal phase distortion on colors $x2/$x6/$xA, in degrees, default = 0.0
   -ela EMPHASIS_LUMA_ATTENUATION, --emphasis-luma-attenuation EMPHASIS_LUMA_ATTENUATION
                         additonal luma brightness on colors $x4/$x8/$xC, in voltage units, default = 0.0
-  -blp BLACK_POINT, --black-point BLACK_POINT
-                        black point, in voltage units relative to blanking, default = 7.5/140.0 (7.5 IRE)
-  -whp WHITE_POINT, --white-point WHITE_POINT
-                        white point, in voltage units relative to blanking, default = 1.1V (luma level $20)
-  -pal                  designates the colorburst reference to -U ± 45 degrees
-  -cbr COLORBURST_REFERENCE, --colorburst-reference COLORBURST_REFERENCE
-                        phase of colorburst reference. default is 8
   -rfc REFERENCE_COLORSPACE, --reference-colorspace REFERENCE_COLORSPACE
                         use colour.RGB_COLOURSPACES reference colorspace, default = "ITU-R BT.709"
   -dsc DISPLAY_COLORSPACE, --display-colorspace DISPLAY_COLORSPACE
@@ -93,7 +100,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.5.2
+version 0.6.0
 ```
 
 ## License

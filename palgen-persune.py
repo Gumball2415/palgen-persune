@@ -16,32 +16,101 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
 import argparse
 import os
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import colour.models
-import colour.plotting.diagrams
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.5.2")
-parser.add_argument("--skip-plot", action="store_true", help="skips showing the palette plot")
-parser.add_argument("-o", "--output", type=str, help=".pal file output")
-parser.add_argument("-e", "--emphasis", action="store_true", help="add emphasis entries")
-parser.add_argument("-d", "--debug", action="store_true", help="debug messages")
-parser.add_argument("-n", "--normalize", action="store_true", help="normalize decoded colors within range of RGB (ignores black and white points, contrast, and brightness)")
-parser.add_argument("-c", "--clip-black", action="store_true", help="clip negative values in --normalize function")
-parser.add_argument("-w", "--waveforms", action="store_true", help="view composite waveforms")
-parser.add_argument("-p", "--phase-QAM", action="store_true", help="view QAM demodulation")
-parser.add_argument("-r", "--render-png", action="store_true", help="render views as .pngs in docs folder")
-parser.add_argument("-s", "--setup-disable", action="store_true", help="normalize NES signal levels within luma range (ignores black and white points)")
-parser.add_argument("--html-hex", action="store_true", help="print HTML hex triplet values for each palette color")
-parser.add_argument("--wiki-table", action="store_true", help="print MediaWiki formatted color table")
-parser.add_argument("--c-table", action="store_true", help="print an array of hex formatted c-style unsigned integers")
+    epilog="version 0.6.0")
+# print output options
+parser.add_argument(
+    "--html-hex",
+    action="store_true",
+    help="print HTML hex triplet values for each palette color")
+parser.add_argument(
+    "--wiki-table",
+    action="store_true",
+    help="print MediaWiki formatted color table")
+parser.add_argument(
+    "--c-table",
+    action="store_true",
+    help="print an array of hex formatted c-style unsigned integers")
+parser.add_argument(
+    "-d",
+    "--debug",
+    action="store_true",
+    help="debug messages")
 
+# visualization options
+parser.add_argument(
+    "-r",
+    "--render-img",
+    action="store_true",
+    help="render views and diagrams as .pngs and .svgs in docs folder")
+parser.add_argument(
+    "-w",
+    "--waveforms",
+    action="store_true",
+    help="view composite waveforms")
+parser.add_argument(
+    "-p",
+    "--phase-QAM",
+    action="store_true",
+    help="view QAM demodulation")
+
+# file interaction options
+parser.add_argument(
+    "--skip-plot",
+    action="store_true",
+    help="skips showing the palette plot")
+parser.add_argument(
+    "-o",
+    "--output",
+    type=str,
+    help=".pal file output")
+parser.add_argument(
+    "-e",
+    "--emphasis",
+    action="store_true",
+    help="include emphasis entries")
+parser.add_argument(
+    "-t",
+    "--test-image",
+    type=str,
+    help="use 256x240 uint16 raw binary PPU frame buffer for palette proofreading")
+
+# generation options
+parser.add_argument(
+    "-n",
+    "--normalize",
+    type=int,
+    help="0 = normalize all colors within gamut (ignores black and white points, contrast, and brightness), 1 = same as first, but clip negative values",
+    default=(-1))
+parser.add_argument(
+    "-c",
+    "--clip",
+    type=int,
+    help="clips out-of-gamut RGB colors. 0 = any of the RGB channels are clipped to max (default), 1 = color is darkened until RGB channels are in range, 2 = color is desaturated until RGB channels are in range",
+    default=0)
+parser.add_argument(
+    "-s",
+    "--setup-disable",
+    action="store_true",
+    help="normalize NES signal levels within luma range (ignores black and white points)")
+parser.add_argument(
+    "-pal",
+    action="store_true",
+    help = "designates the colorburst reference to -U ± 45 degrees")
+parser.add_argument(
+    "-cbr",
+    "--colorburst-reference",
+    type = np.float64,
+    help = "phase of colorburst reference. default is 8",
+    default = 8)
+
+# color adjustment options
 parser.add_argument(
     "-bri",
     "--brightness",
@@ -54,7 +123,6 @@ parser.add_argument(
     type = np.float64,
     help = "contrast delta, 0.0 to 1.0, default = 0.0",
     default = 0.0)
-
 parser.add_argument(
     "-hue",
     "--hue",
@@ -67,6 +135,19 @@ parser.add_argument(
     type = np.float64,
     help ="saturation delta, -1.0 to 1.0, default = 0.0",
     default = 0)
+parser.add_argument(
+    "-blp",
+    "--black-point",
+    type = np.float64,
+    help = "black point, in voltage units relative to blanking, default = 7.5/140.0 (7.5 IRE)",
+    default =  7.5/140)
+parser.add_argument(
+    "-whp",
+    "--white-point",
+    type = np.float64,
+    help = "white point, in voltage units relative to blanking, default = 1.1V (luma level $20)")
+
+# analog distortion effects options
 parser.add_argument(
     "-phs",
     "--phase-skew",
@@ -85,28 +166,8 @@ parser.add_argument(
     type = np.float64,
     help = "additonal luma brightness on colors $x4/$x8/$xC, in voltage units, default = 0.0",
     default = 0)
-parser.add_argument(
-    "-blp",
-    "--black-point",
-    type = np.float64,
-    help = "black point, in voltage units relative to blanking, default = 7.5/140.0 (7.5 IRE)",
-    default =  7.5/140)
-parser.add_argument(
-    "-whp",
-    "--white-point",
-    type = np.float64,
-    help = "white point, in voltage units relative to blanking, default = 1.1V (luma level $20)")
-parser.add_argument(
-    "-pal",
-    action="store_true",
-    help = "designates the colorburst reference to -U ± 45 degrees")
-parser.add_argument(
-    "-cbr",
-    "--colorburst-reference",
-    type = np.float64,
-    help = "phase of colorburst reference. default is 8",
-    default = 8)
 
+# colorimetry options
 parser.add_argument(
     "-rfc",
     "--reference-colorspace",
@@ -182,6 +243,14 @@ parser.add_argument(
     help = "set custom display whitepoint, in CIE xy chromaticity coordinates")
 
 args = parser.parse_args()
+
+if (args.skip_plot) and (args.output is None) and not (args.render_img):
+    print("warning! palette is generated but not plotted or outputted")
+
+if not (args.skip_plot) or (args.render_img): 
+    import matplotlib.pyplot as plt
+    import matplotlib.gridspec as gridspec
+    import colour.plotting.diagrams
 
 # voltage highs and lows
 # from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
@@ -286,9 +355,6 @@ voltage_buffer = np.empty([12], np.float64)
 U_buffer = np.empty([12], np.float64)
 V_buffer = np.empty([12], np.float64)
 
-# decoded YUV buffer,
-YUV_buffer = np.empty([8,4,16,3], np.float64)
-
 # decoded RGB buffer
 # has to be zero'd out for the normalize function to work
 RGB_buffer = np.zeros([8,4,16,3], np.float64)
@@ -317,10 +383,37 @@ else:
 # used for image sequence plotting
 sequence_counter = 0
 
+def color_clip_darken(RGB_buffer):
+    for emph in range(RGB_buffer.shape[0]):
+        for luma in range(RGB_buffer.shape[1]):
+            for chroma in range(RGB_buffer.shape[2]):
+                # if any of the RGB channels are greater than 1
+                if np.any(np.greater(RGB_buffer[emph, luma, chroma], [1.0, 1.0, 1.0])):
+                    # subtract all channels by delta of greatest channel
+                    # algorithm by DragWx
+                    darken_factor = np.max(RGB_buffer[emph, luma, chroma])
+                    RGB_buffer[emph, luma, chroma] /= darken_factor
+    return RGB_buffer
+
+def color_clip_desaturate(RGB_buffer):
+    for emph in range(RGB_buffer.shape[0]):
+        for luma in range(RGB_buffer.shape[1]):
+            for chroma in range(RGB_buffer.shape[2]):
+                # if any of the RGB channels are greater than 1
+                if np.any(np.greater(RGB_buffer[emph, luma, chroma], [1.0, 1.0, 1.0])):
+                    # desaturate that specific color until channels are within range
+                    # algorithm by DragWx
+                    darken_factor = np.max(RGB_buffer[emph, luma, chroma])
+                    YUV_calc = np.matmul(RGB_to_YUV, RGB_buffer[emph, luma, chroma])
+                    RGB_buffer[emph, luma, chroma] -= YUV_calc[0]
+                    RGB_buffer[emph, luma, chroma] /= darken_factor
+                    RGB_buffer[emph, luma, chroma] += YUV_calc[0]
+    return RGB_buffer
+
 # figure plotting for palette preview
 # TODO: interactivity
-def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = False, export_image = False):
-    if (args.skip_plot and not export_image):
+def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, all_emphasis = False, export_diagrams = False, export_img = False):
+    if (args.skip_plot and not (export_diagrams or export_img)):
         return
     if all_emphasis or not args.emphasis:
         RGB_sub = RGB_buffer
@@ -329,26 +422,40 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = F
         RGB_sub = np.split(RGB_buffer, 8, 0)[emphasis]
         RGB_sub_raw = np.split(RGB_raw, 8, 0)[emphasis]
 
-    YUV_buffer_out = np.empty([luma_range, 16, 3], np.float64)
-    for luma in range(luma_range):
-        for hue in range(16):
-            YUV_buffer_out[luma, hue] = np.matmul(RGB_to_YUV, RGB_sub[luma, hue])
+    YUV_calc = np.einsum('ij,klj->kli', RGB_to_YUV, RGB_sub, dtype=np.float64)
+    color_theta = np.arctan2(YUV_calc[:, :, 2], YUV_calc[:, :, 1])
+    color_r = YUV_calc[:, :, 0]
 
-    color_theta = np.arctan2(YUV_buffer_out[:, :, 2], YUV_buffer_out[:, :, 1])
-    color_r = YUV_buffer_out[:, :, 0]
-
-    fig = plt.figure(tight_layout=True)
+    fig = plt.figure(tight_layout=True, dpi=96)
     gs = gridspec.GridSpec(2, 2)
-
+    
     ax0 = fig.add_subplot(gs[1, 1])
     ax1 = fig.add_subplot(gs[0, 1], projection='polar')
-    ax2 = fig.add_subplot(gs[:, 0])
+    # preview on indexed image (if provided)
+    if (args.test_image is not None and (all_emphasis or not args.emphasis)):
+        ax2 = fig.add_subplot(gs[0, 0])
+        ax3 = fig.add_subplot(gs[1, 0])
+        with open(args.test_image, mode="rb") as index_file:
+            index_image = np.reshape(np.frombuffer(index_file.read(), dtype=np.uint16), (240, 256))
+            preview_image = np.empty([240,256,3], np.float64)
+            for y in range(index_image.shape[0]):
+                for x in range(index_image.shape[1]):
+                    preview_image[y,x] = RGB_sub[(index_image[y,x] >> 4), (index_image[y,x] & 0x0F)]
+            ax3.set_title("Palette preview")
+            ax3.imshow(preview_image)
+            if (export_img):
+                from PIL import Image
+                image_filename = os.path.splitext(args.test_image)[0]
+                imageout = Image.fromarray(np.ubyte(np.around(preview_image * 255)))
+                imageout.save("{0}.png".format(image_filename))
+                imageout.close()
+    else:
+        ax2 = fig.add_subplot(gs[:, 0])
     
-    if (export_image):
+    if (export_diagrams):
         fig.suptitle('NES palette (emphasis = {0:03b})'.format(emphasis))
     else:
         fig.suptitle('NES palette')
-    fig.tight_layout()
 
     # colors
     ax0.set_title("Color swatches")
@@ -358,14 +465,14 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = F
     ax1.set_title("RGB color phase")
     ax1.set_yticklabels([])
     ax1.axis([0, 2*np.pi, 0, 1])
-    ax1.scatter(color_theta, color_r, c=np.reshape(RGB_sub,(luma_range*16, 3)), marker=None, s=color_r*500, zorder=3)
+    ax1.scatter(color_theta, color_r, c=np.reshape(RGB_sub,(RGB_sub.shape[0]*RGB_sub.shape[1], 3)), marker=None, s=color_r*500, zorder=3)
 
     # CIE graph
     colour.plotting.plot_RGB_chromaticities_in_chromaticity_diagram_CIE1931(
-        RGB_sub_raw,
+        RGB_sub,
         colourspace=s_colorspace,
         show_whitepoints=False,
-        scatter_kwargs=dict(c=np.reshape(RGB_sub,(luma_range*16, 3)),alpha=0.1),
+        scatter_kwargs=dict(c=np.reshape(RGB_sub,(RGB_sub.shape[0]*16, 3)),alpha=0.1),
         plot_kwargs=dict(color="gray"),
         figure=fig,
         axes=ax2,
@@ -375,10 +482,10 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = F
         spectral_locus_colours='RGB',
         transparent_background=False)
     colour.plotting.plot_RGB_chromaticities_in_chromaticity_diagram_CIE1931(
-        RGB_sub,
+        RGB_sub_raw,
         colourspace=t_colorspace,
         show_whitepoints=False,
-        scatter_kwargs=dict(c=np.reshape(RGB_sub,(luma_range*16, 3))),
+        scatter_kwargs=dict(c=np.reshape(RGB_sub_raw,(RGB_sub_raw.shape[0]*16, 3))),
         plot_kwargs=dict(color="red"),
         figure=fig,
         axes=ax2,
@@ -389,12 +496,20 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, luma_range, all_emphasis = F
         transparent_background=False)
     ax2.set_title("CIE 1931 chromaticity diagram")
     ax2.grid(which='both', color='grey', linewidth=0.5, linestyle='-', alpha=0.2)
+    ax2.axis([0, 1, 0, 1])
+    ax2.set_aspect('equal', 'box')
 
-    fig.set_size_inches(16, 9)
-    if (export_image):
-        plt.savefig("docs/palette sequence {0:03}.png".format(emphasis), dpi=120)
-        plt.savefig("docs/palette sequence {0:03}.svg".format(emphasis), dpi=120)
-    else:
+    fig.set_size_inches(20, 11.25)
+    if (args.test_image is not None and (all_emphasis or not args.emphasis)):
+        # only tighten the layout if the palette preview is enabled
+        fig.tight_layout()
+    if (export_diagrams):
+        plt.savefig("docs/palette preview emphasis {0:03}.png".format(emphasis))
+        plt.savefig("docs/palette preview emphasis {0:03}.svg".format(emphasis))
+    elif (export_img):
+        plt.savefig("docs/palette preview.png")
+        plt.savefig("docs/palette preview.svg")
+    if not (args.skip_plot):
         plt.show()
     plt.close()
 
@@ -456,26 +571,28 @@ for emphasis in range(8):
                 ax.plot(x, y, 'o-', linewidth=0.7)
                 
                 fig.set_size_inches(16, 9)
-                if args.render_png:
-                    plt.savefig("docs/waveform sequence {0:03}.png".format(sequence_counter), dpi=120)
-                    plt.savefig("docs/waveform sequence {0:03}.svg".format(sequence_counter), dpi=120)
+                if (args.render_img):
+                    plt.savefig("docs/waveform phase {0:03}.png".format(sequence_counter), dpi=120)
+                    plt.savefig("docs/waveform phase {0:03}.svg".format(sequence_counter), dpi=120)
                 else:
                     plt.show()
                 plt.close()
 
-            # normalize voltage
-            emphasis_row_luma = args.emphasis_luma_attenuation if (hue == 0x4 or hue == 0x8 or hue == 0xC) else 0
             antiemphasis_row_chroma = args.antiemphasis_phase_skew if (hue == 0x2 or hue == 0x6 or hue == 0xA) else 0
+            emphasis_row_luma = args.emphasis_luma_attenuation if (hue == 0x4 or hue == 0x8 or hue == 0xC) else 0
+            # normalize voltage
             # decode voltage buffer to YUV
+            # we use RGB_buffer[] as a temporary buffer for YUV
+            
             # decode Y
-            YUV_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer) + emphasis_row_luma
+            RGB_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer) + emphasis_row_luma
             # decode U
             for t in range(12):
                 U_buffer[t] = voltage_buffer[t] * np.sin(
                     2 * np.pi / 12 * (t + colorburst_offset) +
                     np.radians(args.hue + antiemphasis_row_chroma) -
                     np.radians(args.phase_skew * luma)) * 2
-            YUV_buffer[emphasis, luma, hue, 1] = np.average(U_buffer) * (args.saturation + 1)
+            RGB_buffer[emphasis, luma, hue, 1] = np.average(U_buffer) * (args.saturation + 1)
 
             # decode V
             for t in range(12):
@@ -483,10 +600,10 @@ for emphasis in range(8):
                     2 * np.pi / 12 * (t + colorburst_offset) +
                     np.radians(args.hue + antiemphasis_row_chroma) -
                     np.radians(args.phase_skew * luma)) * 2
-            YUV_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
+            RGB_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
 
             # decode YUV to RGB
-            RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), YUV_buffer[emphasis, luma, hue])
+            RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), RGB_buffer[emphasis, luma, hue])
 
             # apply black and white points, brightness, and contrast
             RGB_buffer[emphasis, luma, hue] -= signal_black_point
@@ -540,9 +657,9 @@ for emphasis in range(8):
                 ax1.vlines(color_theta, 0, color_r)
                 
                 fig.set_size_inches(16, 9)
-                if args.render_png:
-                    plt.savefig("docs/QAM sequence {0:03}.png".format(sequence_counter), dpi=120)
-                    plt.savefig("docs/QAM sequence {0:03}.svg".format(sequence_counter), dpi=120)
+                if (args.render_img):
+                    plt.savefig("docs/QAM phase {0:03}.png".format(sequence_counter), dpi=96)
+                    plt.savefig("docs/QAM phase {0:03}.svg".format(sequence_counter), dpi=96)
                 else:
                     plt.show()
                 plt.close()
@@ -551,21 +668,22 @@ for emphasis in range(8):
     if not (args.emphasis):
         break
 
-# convert RGB to display output
+# preserve uncorrected RGB for color plotting
 RGB_raw = RGB_buffer
+# convert RGB to display output
 # convert signal to linear light
 RGB_buffer = colour.models.oetf_inverse_BT709(RGB_buffer)
 
 # transform linear light
 if (args.inverse_chromatic_transform):
-    RGB_buffer[:, :, :] = colour.RGB_to_RGB(
-        RGB_buffer[:, :, :],
+    RGB_buffer = colour.RGB_to_RGB(
+        RGB_buffer,
         s_colorspace,
         t_colorspace,
         chromatic_adaptation_transform=args.chromatic_adaptation_transform)
 else:
-    RGB_buffer[:, :, :] = colour.RGB_to_RGB(
-        RGB_buffer[:, :, :],
+    RGB_buffer = colour.RGB_to_RGB(
+        RGB_buffer,
         t_colorspace,
         s_colorspace,
         chromatic_adaptation_transform=args.chromatic_adaptation_transform)
@@ -573,37 +691,46 @@ else:
 # convert linear light to signal
 RGB_buffer = colour.models.oetf_BT709(RGB_buffer)
 
-# normalize RGB to 0.0-1.0
-# TODO: different clipping methods
-if (args.normalize):
-    if args.clip_black:
+# fit RGB within range of 0.0-1.0
+# clip takes priority over normalize
+if (args.normalize != -1):
+    if (args.normalize == 1):
         np.clip(RGB_buffer, 0, None, out=RGB_buffer)
         np.clip(RGB_raw, 0, None, out=RGB_raw)
+    elif (args.normalize != 0):
+        print("normalize option not recognized, using default")
     RGB_buffer -= np.amin(RGB_buffer)
     RGB_buffer /= (np.amax(RGB_buffer) - np.amin(RGB_buffer))
     RGB_raw -= np.amin(RGB_raw)
     RGB_raw /= (np.amax(RGB_raw) - np.amin(RGB_raw))
 else:
-    np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
-    np.clip(RGB_raw, 0, 1, out=RGB_raw)
+    match args.clip:
+        case 1:
+            RGB_buffer = color_clip_darken(RGB_buffer)
+            RGB_raw = color_clip_darken(RGB_raw)
+        case 2:
+            RGB_buffer = color_clip_desaturate(RGB_buffer)
+            RGB_raw = color_clip_desaturate(RGB_raw)
+
+# clip to 0.0-1.0 to ensure everything is within range
+np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
+np.clip(RGB_raw, 0, 1, out=RGB_raw)
 
 # display data about the palette, and optionally write a .pal file
 if (args.emphasis):
     RGB_buffer = np.reshape(RGB_buffer,(32, 16, 3))
     RGB_raw = np.reshape(RGB_raw,(32, 16, 3))
-    luma_range = 32
 else:
     # crop non-emphasis colors if not enabled
     RGB_buffer = RGB_buffer[0]
     RGB_raw = RGB_raw[0]
-    luma_range = 4
 
 if (args.output is not None):
     with open(args.output, mode="wb") as Palette_file:
         Palette_file.write(np.uint8(np.around(RGB_buffer * 0xFF)))
 
 if (args.html_hex):
-    for luma in range(luma_range):
+    for luma in range(RGB_buffer.shape[0]):
         for hue in range(16):
             print(
                 "#{0:02X}{1:02X}{2:02X}".format(
@@ -629,7 +756,7 @@ if (args.wiki_table):
                 ((luma << 4) + hue)))
     print("|}")
 if (args.c_table):
-    for luma in range(luma_range):
+    for luma in range(RGB_buffer.shape[0]):
         for hue in range(16):
             print(
                 "0x{0:02x}, 0x{1:02x}, 0x{2:02x},".format(
@@ -638,10 +765,10 @@ if (args.c_table):
                     np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF))))
         print("")
 
-if (args.render_png):
+if (args.render_img):
     for emphasis in range(8):
-        NES_palette_plot(RGB_buffer, RGB_raw, emphasis, 4, False, True)
+        NES_palette_plot(RGB_buffer, RGB_raw, emphasis, False, True)
         if not (args.emphasis):
             break
 
-NES_palette_plot(RGB_buffer, RGB_raw, 0, luma_range, True)
+NES_palette_plot(RGB_buffer, RGB_raw, 0, True, False, args.render_img)
