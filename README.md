@@ -80,7 +80,7 @@ options:
   -dsc DISPLAY_COLORSPACE, --display-colorspace DISPLAY_COLORSPACE
                         Use colour.RGB_COLOURSPACES display colorspace, default = "ITU-R BT.709"
   -cat CHROMATIC_ADAPTATION_TRANSFORM, --chromatic-adaptation-transform CHROMATIC_ADAPTATION_TRANSFORM
-                        chromatic adaptation transform method, default = "XYZ Scaling"
+                        chromatic adaptation transform method, default = None
   -ict, --inverse-chromatic-transform
                         invert direction of chromatic adaptation transform method (from display to reference)
   -rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R, --reference-primaries-r REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R
@@ -100,7 +100,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.6.0
+version 0.6.1
 ```
 
 ## License

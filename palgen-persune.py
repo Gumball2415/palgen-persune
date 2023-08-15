@@ -23,7 +23,7 @@ import colour.models
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.6.0")
+    epilog="version 0.6.1")
 # print output options
 parser.add_argument(
     "--html-hex",
@@ -184,8 +184,7 @@ parser.add_argument(
     "-cat",
     "--chromatic-adaptation-transform",
     type = str,
-    help = "chromatic adaptation transform method, default = \"XYZ Scaling\"",
-    default = 'XYZ Scaling')
+    help = "chromatic adaptation transform method, default = None")
 parser.add_argument(
     "-ict",
     "--inverse-chromatic-transform",
@@ -469,10 +468,10 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, all_emphasis = False, export
 
     # CIE graph
     colour.plotting.plot_RGB_chromaticities_in_chromaticity_diagram_CIE1931(
-        RGB_sub,
+        RGB_sub_raw,
         colourspace=s_colorspace,
         show_whitepoints=False,
-        scatter_kwargs=dict(c=np.reshape(RGB_sub,(RGB_sub.shape[0]*16, 3)),alpha=0.1),
+        scatter_kwargs=dict(c=np.reshape(RGB_sub_raw,(RGB_sub_raw.shape[0]*16, 3)),alpha=0.1),
         plot_kwargs=dict(color="gray"),
         figure=fig,
         axes=ax2,
@@ -482,10 +481,10 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, all_emphasis = False, export
         spectral_locus_colours='RGB',
         transparent_background=False)
     colour.plotting.plot_RGB_chromaticities_in_chromaticity_diagram_CIE1931(
-        RGB_sub_raw,
+        RGB_sub,
         colourspace=t_colorspace,
         show_whitepoints=False,
-        scatter_kwargs=dict(c=np.reshape(RGB_sub_raw,(RGB_sub_raw.shape[0]*16, 3))),
+        scatter_kwargs=dict(c=np.reshape(RGB_sub,(RGB_sub.shape[0]*16, 3))),
         plot_kwargs=dict(color="red"),
         figure=fig,
         axes=ax2,
@@ -503,13 +502,13 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, all_emphasis = False, export
     if (args.test_image is not None and (all_emphasis or not args.emphasis)):
         # only tighten the layout if the palette preview is enabled
         fig.tight_layout()
-    if (export_diagrams):
+    if (export_diagrams and not export_img):
         plt.savefig("docs/palette preview emphasis {0:03}.png".format(emphasis))
         plt.savefig("docs/palette preview emphasis {0:03}.svg".format(emphasis))
     elif (export_img):
         plt.savefig("docs/palette preview.png")
         plt.savefig("docs/palette preview.svg")
-    if not (args.skip_plot):
+    else:
         plt.show()
     plt.close()
 
@@ -678,14 +677,14 @@ RGB_buffer = colour.models.oetf_inverse_BT709(RGB_buffer)
 if (args.inverse_chromatic_transform):
     RGB_buffer = colour.RGB_to_RGB(
         RGB_buffer,
-        s_colorspace,
         t_colorspace,
+        s_colorspace,
         chromatic_adaptation_transform=args.chromatic_adaptation_transform)
 else:
     RGB_buffer = colour.RGB_to_RGB(
         RGB_buffer,
-        t_colorspace,
         s_colorspace,
+        t_colorspace,
         chromatic_adaptation_transform=args.chromatic_adaptation_transform)
 
 # convert linear light to signal
