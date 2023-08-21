@@ -18,8 +18,8 @@ This script requires `matplotlib` for graphs.
 
 ## Usage
 ```
-usage: palgen-persune.py [-h] [--html-hex] [--wiki-table] [--c-table] [-d] [-r] [-w] [-p] [--skip-plot] [-o OUTPUT]
-                         [-e] [-t TEST_IMAGE] [-n NORMALIZE] [-c CLIP] [-s] [-pal] [-cbr COLORBURST_REFERENCE]
+usage: palgen-persune.py [-h] [--html-hex] [--wiki-table] [--c-table] [-d] [-r RENDER_IMG] [-w] [-p] [--skip-plot]
+                         [-o OUTPUT] [-e] [-t TEST_IMAGE] [-n NORMALIZE] [-c CLIP] [-pal] [-cbr COLORBURST_REFERENCE]
                          [-bri BRIGHTNESS] [-con CONTRAST] [-hue HUE] [-sat SATURATION] [-blp BLACK_POINT]
                          [-whp WHITE_POINT] [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
                          [-ela EMPHASIS_LUMA_ATTENUATION] [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
@@ -39,7 +39,8 @@ options:
   --wiki-table          print MediaWiki formatted color table
   --c-table             print an array of hex formatted c-style unsigned integers
   -d, --debug           debug messages
-  -r, --render-img      render views and diagrams as .pngs and .svgs in docs folder
+  -r RENDER_IMG, --render-img RENDER_IMG
+                        render views and diagrams as images in docs folder with the provided file extension.
   -w, --waveforms       view composite waveforms
   -p, --phase-QAM       view QAM demodulation
   --skip-plot           skips showing the palette plot
@@ -50,11 +51,11 @@ options:
                         use 256x240 uint16 raw binary PPU frame buffer for palette proofreading
   -n NORMALIZE, --normalize NORMALIZE
                         0 = normalize all colors within gamut (ignores black and white points, contrast, and
-                        brightness), 1 = same as first, but clip negative values
+                        brightness), 1 = same as 1, but clip negative values, 2 = color is desaturated until RGB
+                        channels are within range, 3 = same as 2 but clipped negative values
   -c CLIP, --clip CLIP  clips out-of-gamut RGB colors. 0 = any of the RGB channels are clipped to max (default), 1 =
                         color is darkened until RGB channels are in range, 2 = color is desaturated until RGB channels
                         are in range
-  -s, --setup-disable   normalize NES signal levels within luma range (ignores black and white points)
   -pal                  designates the colorburst reference to -U ± 45 degrees
   -cbr COLORBURST_REFERENCE, --colorburst-reference COLORBURST_REFERENCE
                         phase of colorburst reference. default is 8
@@ -66,9 +67,9 @@ options:
   -sat SATURATION, --saturation SATURATION
                         saturation delta, -1.0 to 1.0, default = 0.0
   -blp BLACK_POINT, --black-point BLACK_POINT
-                        black point, in voltage units relative to blanking, default = 7.5/140.0 (7.5 IRE)
+                        black point, in voltage units relative to blanking, default = (luma level $0F/$1F)
   -whp WHITE_POINT, --white-point WHITE_POINT
-                        white point, in voltage units relative to blanking, default = 1.1V (luma level $20)
+                        white point, in voltage units relative to blanking, default = (luma level $20)
   -phs PHASE_SKEW, --phase-skew PHASE_SKEW
                         differential phase distortion, in degrees, default = 0.0
   -aps ANTIEMPHASIS_PHASE_SKEW, --antiemphasis-phase-skew ANTIEMPHASIS_PHASE_SKEW
@@ -100,7 +101,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.6.1
+version 0.7.0
 ```
 
 ## License

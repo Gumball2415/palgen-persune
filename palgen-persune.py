@@ -23,7 +23,7 @@ import colour.models
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.6.1")
+    epilog="version 0.7.0")
 # print output options
 parser.add_argument(
     "--html-hex",
@@ -47,8 +47,8 @@ parser.add_argument(
 parser.add_argument(
     "-r",
     "--render-img",
-    action="store_true",
-    help="render views and diagrams as .pngs and .svgs in docs folder")
+    type=str,
+    help="render views and diagrams as images in docs folder with the provided file extension.")
 parser.add_argument(
     "-w",
     "--waveforms",
@@ -86,7 +86,7 @@ parser.add_argument(
     "-n",
     "--normalize",
     type=int,
-    help="0 = normalize all colors within gamut (ignores black and white points, contrast, and brightness), 1 = same as first, but clip negative values",
+    help="0 = normalize all colors within gamut (ignores black and white points, contrast, and brightness), 1 = same as 1, but clip negative values, 2 = color is desaturated until RGB channels are within range, 3 = same as 2 but clipped negative values",
     default=(-1))
 parser.add_argument(
     "-c",
@@ -94,11 +94,6 @@ parser.add_argument(
     type=int,
     help="clips out-of-gamut RGB colors. 0 = any of the RGB channels are clipped to max (default), 1 = color is darkened until RGB channels are in range, 2 = color is desaturated until RGB channels are in range",
     default=0)
-parser.add_argument(
-    "-s",
-    "--setup-disable",
-    action="store_true",
-    help="normalize NES signal levels within luma range (ignores black and white points)")
 parser.add_argument(
     "-pal",
     action="store_true",
@@ -139,13 +134,12 @@ parser.add_argument(
     "-blp",
     "--black-point",
     type = np.float64,
-    help = "black point, in voltage units relative to blanking, default = 7.5/140.0 (7.5 IRE)",
-    default =  7.5/140)
+    help = "black point, in voltage units relative to blanking, default = (luma level $0F/$1F)")
 parser.add_argument(
     "-whp",
     "--white-point",
     type = np.float64,
-    help = "white point, in voltage units relative to blanking, default = 1.1V (luma level $20)")
+    help = "white point, in voltage units relative to blanking, default = (luma level $20)")
 
 # analog distortion effects options
 parser.add_argument(
@@ -243,10 +237,10 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-if (args.skip_plot) and (args.output is None) and not (args.render_img):
-    print("warning! palette is generated but not plotted or outputted")
+if (args.skip_plot) and (args.output is None) and not (args.render_img is not None):
+    sys.exit("warning! palette is generated but not plotted or outputted")
 
-if not (args.skip_plot) or (args.render_img): 
+if not (args.skip_plot) or (args.render_img is not None): 
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
     import colour.plotting.diagrams
@@ -293,7 +287,10 @@ s_colorspace = colour.RGB_Colourspace(
     colour.RGB_COLOURSPACES[args.reference_colorspace].name,
     colour.RGB_COLOURSPACES[args.reference_colorspace].primaries,
     colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint)
-if (args.reference_primaries_r is not None and args.reference_primaries_g is not None and args.reference_primaries_b is not None): 
+
+if (args.reference_primaries_r is not None
+    and args.reference_primaries_g is not None
+    and args.reference_primaries_b is not None):
     s_colorspace.name = "custom primaries"
     s_colorspace.primaries = np.array([
         args.reference_primaries_r,
@@ -316,7 +313,10 @@ t_colorspace = colour.RGB_Colourspace(
     colour.RGB_COLOURSPACES[args.display_colorspace].name,
     colour.RGB_COLOURSPACES[args.display_colorspace].primaries,
     colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint)
-if (args.display_primaries_r is not None and args.display_primaries_g is not None and args.display_primaries_b is not None): 
+
+if (args.display_primaries_r is not None
+    and args.display_primaries_g is not None
+    and args.display_primaries_b is not None): 
     t_colorspace.name = "custom primaries"
     t_colorspace.primaries = np.array([
         args.display_primaries_r,
@@ -337,23 +337,6 @@ else:
 s_colorspace.name = "Reference colorspace: {}".format(s_colorspace.name)
 t_colorspace.name = "Display colorspace: {}".format(t_colorspace.name)
 
-# 111111------
-# 22222------2
-# 3333------33
-# 444------444
-# 55------5555
-# 6------66666
-# ------777777
-# -----888888-
-# ----999999--
-# ---AAAAAA---
-# --BBBBBB----
-# -CCCCCC-----
-# signal buffer for decoding
-voltage_buffer = np.empty([12], np.float64)
-U_buffer = np.empty([12], np.float64)
-V_buffer = np.empty([12], np.float64)
-
 # decoded RGB buffer
 # has to be zero'd out for the normalize function to work
 RGB_buffer = np.zeros([8,4,16,3], np.float64)
@@ -369,15 +352,15 @@ colorburst_offset = args.colorburst_reference - 6 - 0.5
 if (args.pal): colorburst_offset += 1.5
 
 # signal buffer normalization
-if (args.setup_disable):
-    signal_black_point = signal_table[1, 1, 0]
-    signal_white_point = signal_table[3, 0, 0]
-else:
+if (args.black_point is not None):
     signal_black_point = signal_table[1, 1, 0] + args.black_point
-    if (args.white_point is not None):
-        signal_white_point = signal_table[1, 1, 0] + args.white_point
-    else:
-        signal_white_point = signal_table[3, 0, 0]
+else:
+    signal_black_point = signal_table[1, 1, 0]
+
+if (args.white_point is not None):
+    signal_white_point = signal_table[1, 1, 0] + args.white_point
+else:
+    signal_white_point = signal_table[3, 0, 0]
 
 # used for image sequence plotting
 sequence_counter = 0
@@ -411,19 +394,15 @@ def color_clip_desaturate(RGB_buffer):
 
 # figure plotting for palette preview
 # TODO: interactivity
-def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, all_emphasis = False, export_diagrams = False, export_img = False):
+def NES_palette_plot(RGB_buffer, RGB_uncorrected, emphasis, all_emphasis = False, export_diagrams = False, export_img = False):
     if (args.skip_plot and not (export_diagrams or export_img)):
         return
     if all_emphasis or not args.emphasis:
         RGB_sub = RGB_buffer
-        RGB_sub_raw = RGB_raw
+        RGB_sub_raw = RGB_uncorrected
     else:
         RGB_sub = np.split(RGB_buffer, 8, 0)[emphasis]
-        RGB_sub_raw = np.split(RGB_raw, 8, 0)[emphasis]
-
-    YUV_calc = np.einsum('ij,klj->kli', RGB_to_YUV, RGB_sub, dtype=np.float64)
-    color_theta = np.arctan2(YUV_calc[:, :, 2], YUV_calc[:, :, 1])
-    color_r = YUV_calc[:, :, 0]
+        RGB_sub_raw = np.split(RGB_uncorrected, 8, 0)[emphasis]
 
     fig = plt.figure(tight_layout=True, dpi=96)
     gs = gridspec.GridSpec(2, 2)
@@ -461,6 +440,10 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, all_emphasis = False, export
     ax0.imshow(RGB_sub)
 
     # polar plot
+    YUV_calc = np.einsum('ij,klj->kli', RGB_to_YUV, RGB_sub, dtype=np.float64)
+    color_theta = np.arctan2(YUV_calc[:, :, 2], YUV_calc[:, :, 1])
+    color_r = YUV_calc[:, :, 0]
+
     ax1.set_title("RGB color phase")
     ax1.set_yticklabels([])
     ax1.axis([0, 2*np.pi, 0, 1])
@@ -502,12 +485,81 @@ def NES_palette_plot(RGB_buffer, RGB_raw, emphasis, all_emphasis = False, export
     if (args.test_image is not None and (all_emphasis or not args.emphasis)):
         # only tighten the layout if the palette preview is enabled
         fig.tight_layout()
-    if (export_diagrams and not export_img):
-        plt.savefig("docs/palette preview emphasis {0:03}.png".format(emphasis))
-        plt.savefig("docs/palette preview emphasis {0:03}.svg".format(emphasis))
+    if (export_diagrams):
+        plt.savefig("docs/palette preview emphasis {0:03}.{1}".format(emphasis, args.render_img))
     elif (export_img):
-        plt.savefig("docs/palette preview.png")
-        plt.savefig("docs/palette preview.svg")
+        plt.savefig("docs/palette preview.{0}".format(args.render_img))
+        if not (args.skip_plot):
+            plt.show()
+    else:
+        plt.show()
+    plt.close()
+
+def NES_QAM_plot(voltage_buffer, U_buffer, V_buffer, emphasis, luma, hue, sequence_counter):
+    fig = plt.figure(tight_layout=True)
+    gs = gridspec.GridSpec(3, 2)
+
+    axY = fig.add_subplot(gs[0,0])
+    axU = fig.add_subplot(gs[1,0])
+    axV = fig.add_subplot(gs[2,0])
+    ax1 = fig.add_subplot(gs[:,1], projection='polar')
+    fig.suptitle("QAM demodulating ${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
+    w = voltage_buffer
+    x = np.arange(0,12)
+    Y_avg = np.average(voltage_buffer)
+    U_avg = np.average(U_buffer)
+    V_avg = np.average(V_buffer)
+    
+    range_axis = (signal_white_point / (signal_white_point - signal_black_point)) - signal_black_point
+    axY.set_title("Y decoding")
+    axY.set_ylabel("value")
+    axY.axis([0, 12, 0, range_axis])
+    axY.plot(x, voltage_buffer, 'o-', linewidth=0.7, label='composite signal')
+    axY.plot(x, np.full((12), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format(Y_avg))
+    axY.legend(loc='lower right')
+    
+    axU.set_title("U decoding")
+    axU.set_ylabel("value")
+    axU.axis([0, 12, -2*range_axis, 2*range_axis])
+    axU.plot(x, U_buffer, 'o-', linewidth=0.7, label='demodulated U signal')
+    axU.plot(x, np.full((12), U_avg), 'o-', linewidth=0.7, label='U value = {:< z.3f}'.format(U_avg))
+    axU.legend(loc='lower right')
+    
+    axV.set_title("V decoding")
+    axV.set_ylabel("value")
+    axV.axis([0, 12, -2*range_axis, 2*range_axis])
+    axV.plot(x, V_buffer, 'o-', linewidth=0.7, label='demodulated V signal')
+    axV.plot(x, np.full((12), V_avg), 'o-', linewidth=0.7, label='V value = {:< z.3f}'.format(V_avg))
+    axV.legend(loc='lower right')
+    
+    color_theta = np.arctan2(V_avg, U_avg)
+    color_r =  np.sqrt(U_avg**2 + V_avg**2)
+    ax1.axis([0, 2*np.pi, 0, 0.6])
+    ax1.set_title("Phasor plot")
+    ax1.scatter(color_theta, color_r)
+    ax1.vlines(color_theta, 0, color_r)
+    
+    fig.set_size_inches(16, 9)
+    if (args.render_img is not None):
+        plt.savefig("docs/QAM phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=96)
+    else:
+        plt.show()
+    plt.close()
+
+def NES_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counter):
+    fig = plt.figure(tight_layout=True)
+    fig.suptitle("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
+    ax = fig.subplots()
+    x = np.arange(0,12)
+    y = voltage_buffer
+    ax.axis([0, 12, 0, 1.5])
+    ax.set_xlabel("Sample count")
+    ax.set_ylabel("Voltage")
+    ax.plot(x, y, 'o-', linewidth=0.7)
+    
+    fig.set_size_inches(16, 9)
+    if (args.render_img is not None):
+        plt.savefig("docs/waveform phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=120)
     else:
         plt.show()
     plt.close()
@@ -522,6 +574,23 @@ for emphasis in range(8):
         emphasis_wave |= 0b111000000111;
     if bool(emphasis & 0b100):		# tint B; aligned to color phase 8
         emphasis_wave |= 0b011111100000;
+
+    # 111111------
+    # 22222------2
+    # 3333------33
+    # 444------444
+    # 55------5555
+    # 6------66666
+    # ------777777
+    # -----888888-
+    # ----999999--
+    # ---AAAAAA---
+    # --BBBBBB----
+    # -CCCCCC-----
+    # signal buffer for decoding
+    voltage_buffer = np.empty([12], np.float64)
+    U_buffer = np.empty([12], np.float64)
+    V_buffer = np.empty([12], np.float64)
 
     for luma in range(4):
         for hue in range(16):
@@ -556,27 +625,6 @@ for emphasis in range(8):
             # voltage_buffer *= kernel
             # voltage_buffer = np.fft.ifft(voltage_buffer)
 
-            if (args.debug):
-                print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
-            if (args.waveforms):
-                fig = plt.figure(tight_layout=True)
-                fig.suptitle("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
-                ax = fig.subplots()
-                x = np.arange(0,12)
-                y = voltage_buffer
-                ax.axis([0, 12, 0, 1.5])
-                ax.set_xlabel("Sample count")
-                ax.set_ylabel("Voltage")
-                ax.plot(x, y, 'o-', linewidth=0.7)
-                
-                fig.set_size_inches(16, 9)
-                if (args.render_img):
-                    plt.savefig("docs/waveform phase {0:03}.png".format(sequence_counter), dpi=120)
-                    plt.savefig("docs/waveform phase {0:03}.svg".format(sequence_counter), dpi=120)
-                else:
-                    plt.show()
-                plt.close()
-
             antiemphasis_row_chroma = args.antiemphasis_phase_skew if (hue == 0x2 or hue == 0x6 or hue == 0xA) else 0
             emphasis_row_luma = args.emphasis_luma_attenuation if (hue == 0x4 or hue == 0x8 or hue == 0xC) else 0
             # normalize voltage
@@ -604,71 +652,26 @@ for emphasis in range(8):
             # decode YUV to RGB
             RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), RGB_buffer[emphasis, luma, hue])
 
-            # apply black and white points, brightness, and contrast
-            RGB_buffer[emphasis, luma, hue] -= signal_black_point
-            RGB_buffer[emphasis, luma, hue] /= (signal_white_point - signal_black_point)
-            RGB_buffer[emphasis, luma, hue] += args.brightness
-            RGB_buffer[emphasis, luma, hue] *= (args.contrast + 1)
-
             # visualize chroma decoding
+            if (args.debug):
+                print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
+            if (args.waveforms):
+                NES_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counter)
             if (args.phase_QAM):
-                fig = plt.figure(tight_layout=True)
-                gs = gridspec.GridSpec(3, 2)
-
-                axY = fig.add_subplot(gs[0,0])
-                axU = fig.add_subplot(gs[1,0])
-                axV = fig.add_subplot(gs[2,0])
-                ax1 = fig.add_subplot(gs[:,1], projection='polar')
-                fig.suptitle("QAM demodulating ${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
-                w = voltage_buffer
-                x = np.arange(0,12)
-                Y_avg = np.average(voltage_buffer)
-                U_avg = np.average(U_buffer)
-                V_avg = np.average(V_buffer)
-                
-                range_axis = (signal_white_point / (signal_white_point - signal_black_point)) - signal_black_point
-                axY.set_title("Y decoding")
-                axY.set_ylabel("value")
-                axY.axis([0, 12, 0, range_axis])
-                axY.plot(x, voltage_buffer, 'o-', linewidth=0.7, label='composite signal')
-                axY.plot(x, np.full((12), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format(Y_avg))
-                axY.legend(loc='lower right')
-                
-                axU.set_title("U decoding")
-                axU.set_ylabel("value")
-                axU.axis([0, 12, -2*range_axis, 2*range_axis])
-                axU.plot(x, U_buffer, 'o-', linewidth=0.7, label='demodulated U signal')
-                axU.plot(x, np.full((12), U_avg), 'o-', linewidth=0.7, label='U value = {:< z.3f}'.format(U_avg))
-                axU.legend(loc='lower right')
-                
-                axV.set_title("V decoding")
-                axV.set_ylabel("value")
-                axV.axis([0, 12, -2*range_axis, 2*range_axis])
-                axV.plot(x, V_buffer, 'o-', linewidth=0.7, label='demodulated V signal')
-                axV.plot(x, np.full((12), V_avg), 'o-', linewidth=0.7, label='V value = {:< z.3f}'.format(V_avg))
-                axV.legend(loc='lower right')
-                
-                color_theta = np.arctan2(V_avg, U_avg)
-                color_r =  np.sqrt(U_avg**2 + V_avg**2)
-                ax1.axis([0, 2*np.pi, 0, 0.6])
-                ax1.set_title("Phasor plot")
-                ax1.scatter(color_theta, color_r)
-                ax1.vlines(color_theta, 0, color_r)
-                
-                fig.set_size_inches(16, 9)
-                if (args.render_img):
-                    plt.savefig("docs/QAM phase {0:03}.png".format(sequence_counter), dpi=96)
-                    plt.savefig("docs/QAM phase {0:03}.svg".format(sequence_counter), dpi=96)
-                else:
-                    plt.show()
-                plt.close()
+                NES_QAM_plot(voltage_buffer, U_buffer, V_buffer, emphasis, luma, hue, sequence_counter)
 
             sequence_counter += 1
     if not (args.emphasis):
         break
 
+# apply black and white points, brightness, and contrast
+RGB_buffer -= signal_black_point
+RGB_buffer /= (signal_white_point - signal_black_point)
+RGB_buffer += args.brightness
+RGB_buffer *= (args.contrast + 1)
+
 # preserve uncorrected RGB for color plotting
-RGB_raw = RGB_buffer
+RGB_uncorrected = RGB_buffer
 # convert RGB to display output
 # convert signal to linear light
 RGB_buffer = colour.models.oetf_inverse_BT709(RGB_buffer)
@@ -693,36 +696,42 @@ RGB_buffer = colour.models.oetf_BT709(RGB_buffer)
 # fit RGB within range of 0.0-1.0
 # clip takes priority over normalize
 if (args.normalize != -1):
-    if (args.normalize == 1):
-        np.clip(RGB_buffer, 0, None, out=RGB_buffer)
-        np.clip(RGB_raw, 0, None, out=RGB_raw)
-    elif (args.normalize != 0):
-        print("normalize option not recognized, using default")
-    RGB_buffer -= np.amin(RGB_buffer)
-    RGB_buffer /= (np.amax(RGB_buffer) - np.amin(RGB_buffer))
-    RGB_raw -= np.amin(RGB_raw)
-    RGB_raw /= (np.amax(RGB_raw) - np.amin(RGB_raw))
+    match args.normalize:
+        case 0:
+            RGB_buffer -= np.amin(RGB_buffer)
+            RGB_buffer /= np.amax(RGB_buffer)
+            RGB_uncorrected -= np.amin(RGB_uncorrected)
+            RGB_uncorrected /= np.amax(RGB_uncorrected)
+        case 1:
+            RGB_buffer /= np.amax(RGB_buffer)
+            RGB_uncorrected /= np.amax(RGB_uncorrected)
+        case _:
+            print("normalize option not recognized, using default")
+            RGB_buffer -= np.amin(RGB_buffer)
+            RGB_buffer /= (np.amax(RGB_buffer) - np.amin(RGB_buffer))
+            RGB_uncorrected -= np.amin(RGB_uncorrected)
+            RGB_uncorrected /= (np.amax(RGB_uncorrected) - np.amin(RGB_uncorrected))
 else:
     match args.clip:
         case 1:
             RGB_buffer = color_clip_darken(RGB_buffer)
-            RGB_raw = color_clip_darken(RGB_raw)
+            RGB_uncorrected = color_clip_darken(RGB_uncorrected)
         case 2:
             RGB_buffer = color_clip_desaturate(RGB_buffer)
-            RGB_raw = color_clip_desaturate(RGB_raw)
+            RGB_uncorrected = color_clip_desaturate(RGB_uncorrected)
 
 # clip to 0.0-1.0 to ensure everything is within range
 np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
-np.clip(RGB_raw, 0, 1, out=RGB_raw)
+np.clip(RGB_uncorrected, 0, 1, out=RGB_uncorrected)
 
 # display data about the palette, and optionally write a .pal file
 if (args.emphasis):
     RGB_buffer = np.reshape(RGB_buffer,(32, 16, 3))
-    RGB_raw = np.reshape(RGB_raw,(32, 16, 3))
+    RGB_uncorrected = np.reshape(RGB_uncorrected,(32, 16, 3))
 else:
     # crop non-emphasis colors if not enabled
     RGB_buffer = RGB_buffer[0]
-    RGB_raw = RGB_raw[0]
+    RGB_uncorrected = RGB_uncorrected[0]
 
 if (args.output is not None):
     with open(args.output, mode="wb") as Palette_file:
@@ -764,10 +773,10 @@ if (args.c_table):
                     np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF))))
         print("")
 
-if (args.render_img):
+if (args.render_img is not None):
     for emphasis in range(8):
-        NES_palette_plot(RGB_buffer, RGB_raw, emphasis, False, True)
+        NES_palette_plot(RGB_buffer, RGB_uncorrected, emphasis, False, (args.render_img is not None))
         if not (args.emphasis):
             break
 
-NES_palette_plot(RGB_buffer, RGB_raw, 0, True, False, args.render_img)
+NES_palette_plot(RGB_buffer, RGB_uncorrected, 0, True, False, (args.render_img is not None))
