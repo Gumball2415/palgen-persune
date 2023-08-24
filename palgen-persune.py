@@ -18,12 +18,12 @@
 
 import argparse
 import os
+import sys
 import numpy as np
-import colour.models
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.7.0")
+    epilog="version 0.7.1")
 # print output options
 parser.add_argument(
     "--html-hex",
@@ -244,6 +244,8 @@ if not (args.skip_plot) or (args.render_img is not None):
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
     import colour.plotting.diagrams
+
+import colour.models
 
 # voltage highs and lows
 # from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
