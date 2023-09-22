@@ -23,7 +23,7 @@ import numpy as np
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.7.1")
+    epilog="version 0.7.2")
 # print output options
 parser.add_argument(
     "--html-hex",
@@ -70,6 +70,10 @@ parser.add_argument(
     "--output",
     type=str,
     help=".pal file output")
+parser.add_argument(
+    "--float_pal",
+    type=str,
+    help=".pal file but with 32-bit single precision floating point numbers")
 parser.add_argument(
     "-e",
     "--emphasis",
@@ -738,6 +742,10 @@ else:
 if (args.output is not None):
     with open(args.output, mode="wb") as Palette_file:
         Palette_file.write(np.uint8(np.around(RGB_buffer * 0xFF)))
+
+if (args.float_pal is not None):
+    with open(args.float_pal, mode="wb") as Palette_file:
+        Palette_file.write(RGB_buffer)
 
 if (args.html_hex):
     for luma in range(RGB_buffer.shape[0]):
