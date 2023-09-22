@@ -23,7 +23,7 @@ import numpy as np
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.7.2")
+    epilog="version 0.7.3")
 # print output options
 parser.add_argument(
     "--html-hex",
@@ -71,7 +71,7 @@ parser.add_argument(
     type=str,
     help=".pal file output")
 parser.add_argument(
-    "--float_pal",
+    "--float-pal",
     type=str,
     help=".pal file but with 32-bit single precision floating point numbers")
 parser.add_argument(
@@ -241,7 +241,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-if (args.skip_plot) and (args.output is None) and not (args.render_img is not None):
+if (args.skip_plot) and (args.output is None) and (args.float_pal is None) and not (args.render_img is not None):
     sys.exit("warning! palette is generated but not plotted or outputted")
 
 if not (args.skip_plot) or (args.render_img is not None): 

@@ -19,7 +19,7 @@ This script requires `matplotlib` for graphs.
 ## Usage
 ```
 usage: palgen-persune.py [-h] [--html-hex] [--wiki-table] [--c-table] [-d] [-r RENDER_IMG] [-w] [-p] [--skip-plot]
-                         [-o OUTPUT] [--float_pal FLOAT_PAL] [-e] [-t TEST_IMAGE] [-n NORMALIZE] [-c CLIP] [-pal]
+                         [-o OUTPUT] [--float-pal FLOAT_PAL] [-e] [-t TEST_IMAGE] [-n NORMALIZE] [-c CLIP] [-pal]
                          [-cbr COLORBURST_REFERENCE] [-bri BRIGHTNESS] [-con CONTRAST] [-hue HUE] [-sat SATURATION]
                          [-blp BLACK_POINT] [-whp WHITE_POINT] [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
                          [-ela EMPHASIS_LUMA_ATTENUATION] [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
@@ -46,7 +46,7 @@ options:
   --skip-plot           skips showing the palette plot
   -o OUTPUT, --output OUTPUT
                         .pal file output
-  --float_pal FLOAT_PAL
+  --float-pal FLOAT_PAL
                         .pal file but with 32-bit single precision floating point numbers
   -e, --emphasis        include emphasis entries
   -t TEST_IMAGE, --test-image TEST_IMAGE
@@ -103,7 +103,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.7.2
+version 0.7.3
 ```
 
 ## License
