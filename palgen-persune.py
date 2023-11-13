@@ -23,7 +23,7 @@ import numpy as np
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.8.0")
+    epilog="version 0.8.1")
 # print output options
 parser.add_argument(
     "--html-hex",
@@ -138,7 +138,7 @@ parser.add_argument(
     "-blp",
     "--black-point",
     type = np.float64,
-    help = "black point, in voltage units relative to blanking, default = (luma level $0F/$1F)")
+    help = "black point, in voltage units relative to blanking, default = (luma level $0F)")
 parser.add_argument(
     "-whp",
     "--white-point",
@@ -565,6 +565,78 @@ def NES_QAM_plot(voltage_buffer, U_buffer, V_buffer, emphasis, luma, hue, sequen
         plt.show()
     plt.close()
 
+# debugging, don't mind this
+def NES_SMPTE_plot(RGB_uncorrected, emphasis):
+    if (args.skip_plot):
+        return
+    if not args.emphasis:
+        RGB_sub_raw = RGB_uncorrected
+    else:
+        RGB_sub_raw = np.split(RGB_uncorrected, 8, 0)[emphasis]
+
+    print(RGB_sub_raw.shape)
+    RGB_sub_raw_SMPTE = np.zeros([7,3], np.float64)
+
+    RGB_SMPTE = np.array([
+        [0.75, 0.75, 0.75],
+        [0.75, 0.75, 0],
+        [0, 0.75, 0.75],
+        [0, 0.75, 0],
+        [0.75, 0, 0.75],
+        [0.75, 0, 0],
+        [0, 0, 0.75],
+    ], np.float64)
+
+    YUV_SMPTE = np.zeros(RGB_SMPTE.shape, np.float64)
+    YUV_SMPTE[0,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[0, :])
+    YUV_SMPTE[1,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[1, :])
+    YUV_SMPTE[2,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[2, :])
+    YUV_SMPTE[3,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[3, :])
+    YUV_SMPTE[4,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[4, :])
+    YUV_SMPTE[5,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[5, :])
+    YUV_SMPTE[6,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[6, :])
+
+    RGB_sub_raw_SMPTE[0,:] = RGB_sub_raw[emphasis, 0x1, 0x0, :]
+    RGB_sub_raw_SMPTE[1,:] = RGB_sub_raw[emphasis, 0x2, 0x8, :]
+    RGB_sub_raw_SMPTE[2,:] = RGB_sub_raw[emphasis, 0x2, 0xC, :]
+    RGB_sub_raw_SMPTE[3,:] = RGB_sub_raw[emphasis, 0x1, 0xA, :]
+    RGB_sub_raw_SMPTE[4,:] = RGB_sub_raw[emphasis, 0x1, 0x4, :]
+    RGB_sub_raw_SMPTE[5,:] = RGB_sub_raw[emphasis, 0x1, 0x6, :]
+    RGB_sub_raw_SMPTE[6,:] = RGB_sub_raw[emphasis, 0x0, 0x2, :]
+
+    color_theta_SMPTE = np.arctan2(YUV_SMPTE[:, 2], YUV_SMPTE[:, 1])
+    color_r_SMPTE = np.sqrt(YUV_SMPTE[:, 2]**2 + YUV_SMPTE[:, 1]**2)
+
+    YUV_calc = np.zeros(RGB_sub_raw_SMPTE.shape, np.float64)
+    YUV_calc[0,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[0, :])
+    YUV_calc[1,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[1, :])
+    YUV_calc[2,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[2, :])
+    YUV_calc[3,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[3, :])
+    YUV_calc[4,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[4, :])
+    YUV_calc[5,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[5, :])
+    YUV_calc[6,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[6, :])
+
+    color_theta = np.arctan2(YUV_calc[:, 2], YUV_calc[:, 1])
+    color_r = np.sqrt(YUV_calc[:, 2]**2 + YUV_calc[:, 1]**2)
+
+    print(YUV_calc)
+
+    fig = plt.figure(tight_layout=True, dpi=96)
+    gs = gridspec.GridSpec(2, 2)
+    ax1 = fig.add_subplot(gs[:, :], projection='polar')
+    fig.suptitle('NES palette')
+
+    ax1.set_title("Vectorscope Plot")
+    ax1.set_yticklabels([])
+    ax1.axis([0, 2*np.pi, 0, 0.5])
+    ax1.scatter(color_theta_SMPTE, color_r_SMPTE, c=RGB_SMPTE, marker=None, s=color_r*500, zorder=3)
+    ax1.plot(color_theta, color_r, marker=None, zorder=3)
+
+    fig.set_size_inches(20, 11.25)
+    fig.tight_layout()
+    plt.show()
+    plt.close()
+
 def NES_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counter):
     fig = plt.figure(tight_layout=True)
     fig.suptitle("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
@@ -663,32 +735,35 @@ for emphasis in range(8):
 
             # fft approach
             # voltage_buffer = np.fft.fft(voltage_buffer)
-            # kernel = np.array([1, 1, 0.5, 0.5, 0.5, 0.3, 0, 0, 0, 0, 0, 0], np.float64)
+            # kernel = np.array([1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], np.float64)
             # voltage_buffer *= kernel
-            # voltage_buffer = np.fft.ifft(voltage_buffer)
+            # voltage_buffer = np.fft.ifft(voltage_buffer).real
 
-            antiemphasis_row_chroma = args.antiemphasis_phase_skew if (hue == 0x2 or hue == 0x6 or hue == 0xA) else 0
+            # apply analog effects
+            antiemphasis_column_chroma = args.antiemphasis_phase_skew if (hue == 0x2 or hue == 0x6 or hue == 0xA) else 0
             emphasis_row_luma = args.emphasis_luma_attenuation if (hue == 0x4 or hue == 0x8 or hue == 0xC) else 0
+
             # normalize voltage
+
             # decode voltage buffer to YUV
             # we use RGB_buffer[] as a temporary buffer for YUV
-            
+
             # decode Y
             RGB_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer) + emphasis_row_luma
             # decode U
             for t in range(12):
                 U_buffer[t] = voltage_buffer[t] * np.sin(
                     2 * np.pi / 12 * (t + colorburst_offset) +
-                    np.radians(args.hue + antiemphasis_row_chroma) -
-                    np.radians(args.phase_skew * luma)) * 2
+                    np.radians(args.hue + antiemphasis_column_chroma -
+                    (args.phase_skew * luma))) * 2
             RGB_buffer[emphasis, luma, hue, 1] = np.average(U_buffer) * (args.saturation + 1)
 
             # decode V
             for t in range(12):
                 V_buffer[t] = voltage_buffer[t] * np.cos(
                     2 * np.pi / 12 * (t + colorburst_offset) +
-                    np.radians(args.hue + antiemphasis_row_chroma) -
-                    np.radians(args.phase_skew * luma)) * 2
+                    np.radians(args.hue + antiemphasis_column_chroma -
+                    (args.phase_skew * luma))) * 2
             RGB_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
 
             # decode YUV to RGB
@@ -706,14 +781,20 @@ for emphasis in range(8):
     if not (args.emphasis):
         break
 
+
 # apply black and white points, brightness, and contrast
 RGB_buffer -= signal_black_point
 RGB_buffer /= (signal_white_point - signal_black_point)
 RGB_buffer += args.brightness
 RGB_buffer *= (args.contrast + 1)
 
+# debug: a rough vectorscope plot
+# NES_SMPTE_plot(RGB_buffer, 0)
+
+
 # fit RGB within range of 0.0-1.0
 normalize_RGB(RGB_buffer)
+
 
 # preserve uncorrected RGB for color plotting
 RGB_uncorrected = RGB_buffer

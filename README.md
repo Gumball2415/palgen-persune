@@ -71,7 +71,7 @@ options:
   -sat SATURATION, --saturation SATURATION
                         saturation delta, -1.0 to 1.0, default = 0.0
   -blp BLACK_POINT, --black-point BLACK_POINT
-                        black point, in voltage units relative to blanking, default = (luma level $0F/$1F)
+                        black point, in voltage units relative to blanking, default = (luma level $0F)
   -whp WHITE_POINT, --white-point WHITE_POINT
                         white point, in voltage units relative to blanking, default = (luma level $20)
   -phs PHASE_SKEW, --phase-skew PHASE_SKEW
@@ -108,7 +108,7 @@ options:
   -dpw DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W, --display-primaries-w DISPLAY_PRIMARIES_W DISPLAY_PRIMARIES_W
                         set custom display whitepoint, in CIE xy chromaticity coordinates
 
-version 0.8.0
+version 0.8.1
 ```
 
 ## License
