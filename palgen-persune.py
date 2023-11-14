@@ -23,7 +23,7 @@ import numpy as np
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
-    epilog="version 0.8.1")
+    epilog="version 0.8.2")
 # print output options
 parser.add_argument(
     "--html-hex",
