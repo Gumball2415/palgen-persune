@@ -20,6 +20,7 @@ import argparse
 import os
 import sys
 import numpy as np
+import colour.models
 
 parser=argparse.ArgumentParser(
     description="yet another NES palette generator",
@@ -261,8 +262,6 @@ if not (args.skip_plot) or (args.render_img is not None):
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
     import colour.plotting.diagrams
-
-import colour.models
 
 # voltage highs and lows
 # from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
@@ -750,6 +749,7 @@ for emphasis in range(8):
 
             # decode Y
             RGB_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer) + emphasis_row_luma
+
             # decode U
             for t in range(12):
                 U_buffer[t] = voltage_buffer[t] * np.sin(
@@ -791,13 +791,12 @@ RGB_buffer *= (args.contrast + 1)
 # debug: a rough vectorscope plot
 # NES_SMPTE_plot(RGB_buffer, 0)
 
-
 # fit RGB within range of 0.0-1.0
 normalize_RGB(RGB_buffer)
 
-
 # preserve uncorrected RGB for color plotting
 RGB_uncorrected = RGB_buffer
+
 # convert RGB to display output
 
 # convert linear signal to linear light
