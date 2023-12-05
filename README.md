@@ -1,6 +1,7 @@
 # Palette Generator
 
 yet another NES palette generator, in Python
+
 <img src="docs/palette preview.png">
 <img src="docs/waveform phase.gif">
 <img src="docs/QAM phase.gif">
@@ -12,11 +13,17 @@ something to note: there _is_ no one true NES palette, but this generator can pr
 
 See `requirements.txt` for more details.
 
-This script requires `numpy` for arrays and matrix math.
+### **NOTE!**
 
-This script requires the `colour-science` library for linear light functions, color adaptation, and CIE 1931 colorimetry diagrams.
+`colour-science` has **not yet been updated for Python 3.12**.
+In the meantime, use **Python 3.11**.
 
-This script requires `matplotlib` for graphs.
+### This script requires:
+
+- `colour-science == 0.4.3`
+	- for linear light, and color adaptation functions. 
+- `matplotlib == 3.8.2`
+	- for graphs and `colour-science` CIE 1931 colorimetry diagrams.
 
 ## Usage
 ```
