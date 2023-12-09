@@ -21,406 +21,268 @@ import os
 import sys
 import numpy as np
 import colour.models
+import colour.plotting.diagrams
 
-parser=argparse.ArgumentParser(
-    description="yet another NES palette generator",
-    epilog="version 0.8.2")
-# print output options
-parser.add_argument(
-    "--html-hex",
-    action="store_true",
-    help="print HTML hex triplet values for each palette color")
-parser.add_argument(
-    "--wiki-table",
-    action="store_true",
-    help="print MediaWiki formatted color table")
-parser.add_argument(
-    "--c-table",
-    action="store_true",
-    help="print an array of hex formatted c-style unsigned integers")
-parser.add_argument(
-    "-d",
-    "--debug",
-    action="store_true",
-    help="debug messages")
+def parse_argv(argv):
+    parser=argparse.ArgumentParser(
+        description="yet another NES palette generator",
+        epilog="version 0.9.0")
+    # output options
+    parser.add_argument(
+        "-d",
+        "--debug",
+        action="store_true",
+        help="debug messages")
+    parser.add_argument(
+        "--skip-plot",
+        action="store_true",
+        help="skips showing the palette plot")
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        help="file output path")
+    parser.add_argument(
+        "-f",
+        "--file-format",
+        choices=[
+            "binary uint8 palette",
+            "binary double palette",
+            "text Jasc Paint Shop Pro Palette .pal file",
+            "text HTML hex triplet values",
+            "text NESDev MediaWiki table",
+            "text C-style unsigned int table",
+        ],
+        default="binary uint8_t palette",
+        help="file output format. default = \"binary uint8 palette\"")
+    parser.add_argument(
+        "-e",
+        "--emphasis",
+        action="store_true",
+        help="include emphasis entries")
+    parser.add_argument(
+        "-t",
+        "--test-image",
+        type=str,
+        help="use 256x240 uint16 raw binary PPU frame buffer for palette proofreading")
 
-# visualization options
-parser.add_argument(
-    "-r",
-    "--render-img",
-    type=str,
-    help="render views and diagrams as images in docs folder with the provided file extension.")
-parser.add_argument(
-    "-w",
-    "--waveforms",
-    action="store_true",
-    help="view composite waveforms")
-parser.add_argument(
-    "-p",
-    "--phase-QAM",
-    action="store_true",
-    help="view QAM demodulation")
+    # visualization options
+    parser.add_argument(
+        "-r",
+        "--render-img",
+        type=str,
+        help="render views and diagrams as images in docs folder with the provided file extension.")
+    parser.add_argument(
+        "-w",
+        "--waveforms",
+        action="store_true",
+        help="view composite waveforms")
+    parser.add_argument(
+        "-p",
+        "--phase-QAM",
+        action="store_true",
+        help="view QAM demodulation")
 
-# file interaction options
-parser.add_argument(
-    "--skip-plot",
-    action="store_true",
-    help="skips showing the palette plot")
-parser.add_argument(
-    "-o",
-    "--output",
-    type=str,
-    help=".pal file output")
-parser.add_argument(
-    "--float-pal",
-    type=str,
-    help=".pal file but with 64-bit double precision floating point numbers")
-parser.add_argument(
-    "-e",
-    "--emphasis",
-    action="store_true",
-    help="include emphasis entries")
-parser.add_argument(
-    "-t",
-    "--test-image",
-    type=str,
-    help="use 256x240 uint16 raw binary PPU frame buffer for palette proofreading")
+    # generation options
+    parser.add_argument(
+        "-n",
+        "--normalize",
+        type=str,
+        help="normalize all colors within gamut by scaling values",
+        choices=[
+            "scale",
+            "scale clip negative"
+        ])
+    parser.add_argument(
+        "-ppu",
+        type=str,
+        help="PPU chip used for generating colors. default = 2C02",
+        choices=[
+            "2C02",
+            "2C03",
+            "2C04-0000",
+            "2C04-0001",
+            "2C04-0002",
+            "2C04-0003",
+            "2C04-0004",
+            "2C05-99",
+            "2C07",
+        ],
+        default = "2C02")
+    parser.add_argument(
+        "-c",
+        "--clip",
+        type=str,
+        help="clips out-of-gamut RGB colors",
+        choices=[
+            "darken",
+            "desaturate"
+        ])
 
-# generation options
-parser.add_argument(
-    "-n",
-    "--normalize",
-    type=int,
-    help="0 = normalize all colors within gamut (ignores black and white points, contrast, and brightness), 1 = same as 1, but clip negative values, 2 = color is desaturated until RGB channels are within range, 3 = same as 2 but clipped negative values",
-    default=(-1))
-parser.add_argument(
-    "-c",
-    "--clip",
-    type=int,
-    help="clips out-of-gamut RGB colors. 0 = any of the RGB channels are clipped to max (default), 1 = color is darkened until RGB channels are in range, 2 = color is desaturated until RGB channels are in range",
-    default=0)
-parser.add_argument(
-    "-pal",
-    action="store_true",
-    help = "designates the colorburst reference to -U ± 45 degrees")
-parser.add_argument(
-    "-cbr",
-    "--colorburst-reference",
-    type = np.float64,
-    help = "phase of colorburst reference. default is 8",
-    default = 8)
+    # color adjustment options
+    parser.add_argument(
+        "-bri",
+        "--brightness",
+        type = np.float64,
+        help = "brightness delta, -1.0 to 1.0, default = 0.0",
+        default = 0.0)
+    parser.add_argument(
+        "-con",
+        "--contrast",
+        type = np.float64,
+        help = "contrast delta, 0.0 to 1.0, default = 0.0",
+        default = 0.0)
+    parser.add_argument(
+        "-hue",
+        "--hue",
+        type = np.float64,
+        help = "hue angle delta, in degrees, default = 0.0",
+        default = 0)
+    parser.add_argument(
+        "-sat",
+        "--saturation",
+        type = np.float64,
+        help ="saturation delta, -1.0 to 1.0, default = 0.0",
+        default = 0)
+    parser.add_argument(
+        "-blp",
+        "--black-point",
+        type = np.float64,
+        help = "black point, in voltage units relative to blanking, default = (lowest signal level)")
+    parser.add_argument(
+        "-whp",
+        "--white-point",
+        type = np.float64,
+        help = "white point, in voltage units relative to blanking, default = (highest signal level)")
 
-# color adjustment options
-parser.add_argument(
-    "-bri",
-    "--brightness",
-    type = np.float64,
-    help = "brightness delta, -1.0 to 1.0, default = 0.0",
-    default = 0.0)
-parser.add_argument(
-    "-con",
-    "--contrast",
-    type = np.float64,
-    help = "contrast delta, 0.0 to 1.0, default = 0.0",
-    default = 0.0)
-parser.add_argument(
-    "-hue",
-    "--hue",
-    type = np.float64,
-    help = "hue angle delta, in degrees, default = 0.0",
-    default = 0)
-parser.add_argument(
-    "-sat",
-    "--saturation",
-    type = np.float64,
-    help ="saturation delta, -1.0 to 1.0, default = 0.0",
-    default = 0)
-parser.add_argument(
-    "-blp",
-    "--black-point",
-    type = np.float64,
-    help = "black point, in voltage units relative to blanking, default = (luma level $0F)")
-parser.add_argument(
-    "-whp",
-    "--white-point",
-    type = np.float64,
-    help = "white point, in voltage units relative to blanking, default = (luma level $20)")
+    # analog distortion effects options
+    parser.add_argument(
+        "-phs",
+        "--phase-skew",
+        type = np.float64,
+        help = "differential phase distortion for composite PPUs, in degrees, default = 0.0",
+        default = 0)
+    parser.add_argument(
+        "-aps",
+        "--antiemphasis-phase-skew",
+        type = np.float64,
+        help = "additonal phase distortion on colors $x2/$x6/$xA for composite PPUs, in degrees, default = 0.0",
+        default = 0)
+    parser.add_argument(
+        "-ela",
+        "--emphasis-luma-attenuation",
+        type = np.float64,
+        help = "additonal luma brightness on colors $x4/$x8/$xC for composite PPUs, in voltage units, default = 0.0",
+        default = 0)
 
-# analog distortion effects options
-parser.add_argument(
-    "-phs",
-    "--phase-skew",
-    type = np.float64,
-    help = "differential phase distortion, in degrees, default = 0.0",
-    default = 0)
-parser.add_argument(
-    "-aps",
-    "--antiemphasis-phase-skew",
-    type = np.float64,
-    help = "additonal phase distortion on colors $x2/$x6/$xA, in degrees, default = 0.0",
-    default = 0)
-parser.add_argument(
-    "-ela",
-    "--emphasis-luma-attenuation",
-    type = np.float64,
-    help = "additonal luma brightness on colors $x4/$x8/$xC, in voltage units, default = 0.0",
-    default = 0)
+    # colorimetry options
+    parser.add_argument(
+        "-rfc",
+        "--reference-colorspace",
+        type = str,
+        help = "use colour.RGB_COLOURSPACES reference colorspace, default = \"ITU-R BT.709\"",
+        default = 'ITU-R BT.709')
+    parser.add_argument(
+        "-dsc",
+        "--display-colorspace",
+        type = str,
+        help = "Use colour.RGB_COLOURSPACES display colorspace, default = \"ITU-R BT.709\"",
+        default = 'ITU-R BT.709')
+    parser.add_argument(
+        "-cat",
+        "--chromatic-adaptation-transform",
+        type = str,
+        help = "chromatic adaptation transform method, default = None",
+        default = None)
+    parser.add_argument(
+        "-ict",
+        "--inverse-chromatic-transform",
+        action="store_true",
+        help = "invert direction of chromatic adaptation transform method (from display to reference)")
+    parser.add_argument(
+        "-oetf",
+        "--opto-electronic",
+        type=str,
+        help="applies \"colour.models\" opto-electronic transfer function to the palette, default = \"ITU-R BT.709\"",
+        default = "ITU-R BT.709")
+    parser.add_argument(
+        "--linear-light",
+        action="store_true",
+        help="skip converting linear light to linear signal")
 
-# colorimetry options
-parser.add_argument(
-    "-rfc",
-    "--reference-colorspace",
-    type = str,
-    help = "use colour.RGB_COLOURSPACES reference colorspace, default = \"ITU-R BT.709\"",
-    default = 'ITU-R BT.709')
-parser.add_argument(
-    "-dsc",
-    "--display-colorspace",
-    type = str,
-    help = "Use colour.RGB_COLOURSPACES display colorspace, default = \"ITU-R BT.709\"",
-    default = 'ITU-R BT.709')
-parser.add_argument(
-    "-cat",
-    "--chromatic-adaptation-transform",
-    type = str,
-    help = "chromatic adaptation transform method, default = None",
-    default = None)
-parser.add_argument(
-    "-ict",
-    "--inverse-chromatic-transform",
-    action="store_true",
-    help = "invert direction of chromatic adaptation transform method (from display to reference)")
-parser.add_argument(
-    "-oetf",
-    "--opto-electronic",
-    type=str,
-    help="applies an opto-electronic transfer function to the palette, default = \"ITU-R BT.709\"",
-    default = "ITU-R BT.709")
-parser.add_argument(
-    "--linear-light",
-    action="store_true",
-    help="skip converting linear light to linear signal")
+    # colorimetry reference RGB and whitepoint primaries
+    parser.add_argument(
+        "-rpr",
+        "--reference-primaries-r",
+        type = np.float64,
+        nargs=2,
+        help = "set custom reference color primary R, in CIE xy chromaticity coordinates")
+    parser.add_argument(
+        "-rpg",
+        "--reference-primaries-g",
+        type = np.float64,
+        nargs=2,
+        help = "set custom reference color primary G, in CIE xy chromaticity coordinates")
+    parser.add_argument(
+        "-rpb",
+        "--reference-primaries-b",
+        type = np.float64,
+        nargs=2,
+        help = "set custom reference color primary B, in CIE xy chromaticity coordinates")
+    parser.add_argument(
+        "-rpw",
+        "--reference-primaries-w",
+        type = np.float64,
+        nargs=2,
+        help = "set custom reference whitepoint, in CIE xy chromaticity coordinates")
 
-# colorimetry reference RGB and whitepoint primaries
-parser.add_argument(
-    "-rpr",
-    "--reference-primaries-r",
-    type = np.float64,
-    nargs=2,
-    help = "set custom reference color primary R, in CIE xy chromaticity coordinates")
-parser.add_argument(
-    "-rpg",
-    "--reference-primaries-g",
-    type = np.float64,
-    nargs=2,
-    help = "set custom reference color primary G, in CIE xy chromaticity coordinates")
-parser.add_argument(
-    "-rpb",
-    "--reference-primaries-b",
-    type = np.float64,
-    nargs=2,
-    help = "set custom reference color primary B, in CIE xy chromaticity coordinates")
-parser.add_argument(
-    "-rpw",
-    "--reference-primaries-w",
-    type = np.float64,
-    nargs=2,
-    help = "set custom reference whitepoint, in CIE xy chromaticity coordinates")
-
-# colorimetry display RGB and whitepoint primaries
-parser.add_argument(
-    "-dpr",
-    "--display-primaries-r",
-    type = np.float64,
-    nargs=2,
-    help = "set custom display color primary R, in CIE xy chromaticity coordinates")
-parser.add_argument(
-    "-dpg",
-    "--display-primaries-g",
-    type = np.float64,
-    nargs=2,
-    help = "set custom display color primary G, in CIE xy chromaticity coordinates")
-parser.add_argument(
-    "-dpb",
-    "--display-primaries-b",
-    type = np.float64,
-    nargs=2,
-    help = "set custom display color primary B, in CIE xy chromaticity coordinates")
-parser.add_argument(
-    "-dpw",
-    "--display-primaries-w",
-    type = np.float64,
-    nargs=2,
-    help = "set custom display whitepoint, in CIE xy chromaticity coordinates")
-
-args = parser.parse_args()
-
-if (args.skip_plot) and (args.output is None) and (args.float_pal is None) and not (args.render_img is not None):
-    sys.exit("warning! palette is generated but not plotted or outputted")
-
-if not (args.skip_plot) or (args.render_img is not None): 
-    import matplotlib.pyplot as plt
-    import matplotlib.gridspec as gridspec
-    import colour.plotting.diagrams
-
-# voltage highs and lows
-# from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
-# signal[4][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
-signal_table = np.array([
-    [
-        [ 0.616, 0.500 ],
-        [ 0.228, 0.192 ]
-    ],
-    [
-        [ 0.840, 0.676 ],
-        [ 0.312, 0.256 ]
-    ],
-    [
-        [ 1.100, 0.896 ],
-        [ 0.552, 0.448 ]
-    ],
-    [
-        [ 1.100, 0.896 ],
-        [ 0.880, 0.712 ]
-    ]
-], np.float64)
-
-# B-Y and R-Y reduction factors
-BY_rf = 0.492111
-RY_rf = 0.877283
-
-# derived from the NTSC base matrix of luminance and color-difference
-RGB_to_YUV = np.array([
-    [ 0.299,        0.587,        0.114],
-    [-0.299*BY_rf, -0.587*BY_rf,  0.886*BY_rf],
-    [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
-], np.float64)
-
-# special thanks to NewRisingSun for teaching me how chromatic adaptations work!
-# special thanks to _aitchFactor for pointing out that colour-science has
-# chromatic adaptation functions!
-
-# reference color profile colorspace
-s_colorspace = colour.RGB_Colourspace(
-    colour.RGB_COLOURSPACES[args.reference_colorspace].name,
-    colour.RGB_COLOURSPACES[args.reference_colorspace].primaries,
-    colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint)
-
-if (args.reference_primaries_r is not None
-    and args.reference_primaries_g is not None
-    and args.reference_primaries_b is not None):
-    s_colorspace.name = "custom primaries"
-    s_colorspace.primaries = np.array([
-        args.reference_primaries_r,
-        args.reference_primaries_g,
-        args.reference_primaries_b
-    ])
-else:
-    s_colorspace.name = colour.RGB_COLOURSPACES[args.reference_colorspace].name
-    s_colorspace.primaries = colour.RGB_COLOURSPACES[args.reference_colorspace].primaries
-
-if (args.reference_primaries_w is not None):
-    s_colorspace.whitepoint = args.reference_primaries_w
-    s_colorspace.whitepoint_name = "custom whitepoint"
-else:
-    s_colorspace.whitepoint_name = colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint_name
-    s_colorspace.whitepoint = colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint
-
-# display color profile colorspace
-t_colorspace = colour.RGB_Colourspace(
-    colour.RGB_COLOURSPACES[args.display_colorspace].name,
-    colour.RGB_COLOURSPACES[args.display_colorspace].primaries,
-    colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint)
-
-if (args.display_primaries_r is not None
-    and args.display_primaries_g is not None
-    and args.display_primaries_b is not None): 
-    t_colorspace.name = "custom primaries"
-    t_colorspace.primaries = np.array([
-        args.display_primaries_r,
-        args.display_primaries_g,
-        args.display_primaries_b
-    ])
-else:
-    t_colorspace.name = colour.RGB_COLOURSPACES[args.display_colorspace].name
-    t_colorspace.primaries = colour.RGB_COLOURSPACES[args.display_colorspace].primaries
-
-if (args.display_primaries_w is not None):
-    t_colorspace.whitepoint = args.display_primaries_w
-    t_colorspace.whitepoint_name = "custom whitepoint"
-else:
-    t_colorspace.whitepoint_name = colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint_name
-    t_colorspace.whitepoint = colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint
-
-s_colorspace.name = "Reference colorspace: {}".format(s_colorspace.name)
-t_colorspace.name = "Display colorspace: {}".format(t_colorspace.name)
-
-# decoded RGB buffer
-# has to be zero'd out for the normalize function to work
-RGB_buffer = np.zeros([8,4,16,3], np.float64)
-
-# fix issue with colors
-offset = 1
-emphasis_offset = 1
-
-# due to the way the waveform is encoded, the hue is off by 15 degrees,
-# or 1/2 of a sample
-colorburst_offset = args.colorburst_reference - 6 - 0.5
-
-if (args.pal): colorburst_offset += 1.5
-
-# signal buffer normalization
-if (args.black_point is not None):
-    signal_black_point = signal_table[1, 1, 0] + args.black_point
-else:
-    signal_black_point = signal_table[1, 1, 0]
-
-if (args.white_point is not None):
-    signal_white_point = signal_table[1, 1, 0] + args.white_point
-else:
-    signal_white_point = signal_table[3, 0, 0]
-
-# used for image sequence plotting
-sequence_counter = 0
-
-def color_clip_darken(RGB_buffer):
-    for emph in range(RGB_buffer.shape[0]):
-        for luma in range(RGB_buffer.shape[1]):
-            for chroma in range(RGB_buffer.shape[2]):
-                # if any of the RGB channels are greater than 1
-                if np.any(np.greater(RGB_buffer[emph, luma, chroma], [1.0, 1.0, 1.0])):
-                    # subtract all channels by delta of greatest channel
-                    # algorithm by DragWx
-                    darken_factor = np.max(RGB_buffer[emph, luma, chroma])
-                    RGB_buffer[emph, luma, chroma] /= darken_factor
-    return RGB_buffer
-
-def color_clip_desaturate(RGB_buffer):
-    for emph in range(RGB_buffer.shape[0]):
-        for luma in range(RGB_buffer.shape[1]):
-            for chroma in range(RGB_buffer.shape[2]):
-                # if any of the RGB channels are greater than 1
-                if np.any(np.greater(RGB_buffer[emph, luma, chroma], [1.0, 1.0, 1.0])):
-                    # desaturate that specific color until channels are within range
-                    # algorithm by DragWx
-                    darken_factor = np.max(RGB_buffer[emph, luma, chroma])
-                    YUV_calc = np.matmul(RGB_to_YUV, RGB_buffer[emph, luma, chroma])
-                    RGB_buffer[emph, luma, chroma] -= YUV_calc[0]
-                    RGB_buffer[emph, luma, chroma] /= darken_factor
-                    RGB_buffer[emph, luma, chroma] += YUV_calc[0]
-    return RGB_buffer
+    # colorimetry display RGB and whitepoint primaries
+    parser.add_argument(
+        "-dpr",
+        "--display-primaries-r",
+        type = np.float64,
+        nargs=2,
+        help = "set custom display color primary R, in CIE xy chromaticity coordinates")
+    parser.add_argument(
+        "-dpg",
+        "--display-primaries-g",
+        type = np.float64,
+        nargs=2,
+        help = "set custom display color primary G, in CIE xy chromaticity coordinates")
+    parser.add_argument(
+        "-dpb",
+        "--display-primaries-b",
+        type = np.float64,
+        nargs=2,
+        help = "set custom display color primary B, in CIE xy chromaticity coordinates")
+    parser.add_argument(
+        "-dpw",
+        "--display-primaries-w",
+        type = np.float64,
+        nargs=2,
+        help = "set custom display whitepoint, in CIE xy chromaticity coordinates")
+    
+    return parser.parse_args(argv[1:])
 
 # figure plotting for palette preview
 # TODO: interactivity
-def NES_palette_plot(RGB_buffer, RGB_uncorrected, emphasis, all_emphasis = False, export_diagrams = False, export_img = False):
+def palette_plot(RGB_buffer,
+    RGB_uncorrected,
+    emphasis,
+    all_emphasis = False,
+    export_diagrams = False,
+    export_img = False,
+    args=None,
+    s_colorspace = None,
+    t_colorspace = None):
     if (args.skip_plot and not (export_diagrams or export_img)):
         return
-    if all_emphasis or not args.emphasis:
-        RGB_sub = RGB_buffer
-        RGB_sub_raw = RGB_uncorrected
-    else:
-        RGB_sub = np.split(RGB_buffer, 8, 0)[emphasis]
-        RGB_sub_raw = np.split(RGB_uncorrected, 8, 0)[emphasis]
+
+    import matplotlib.pyplot as plt
+    import matplotlib.gridspec as gridspec
+
+    RGB_sub = RGB_buffer
+    RGB_sub_raw = RGB_uncorrected
 
     fig = plt.figure(tight_layout=True, dpi=96)
     gs = gridspec.GridSpec(2, 2)
@@ -513,7 +375,20 @@ def NES_palette_plot(RGB_buffer, RGB_uncorrected, emphasis, all_emphasis = False
         plt.show()
     plt.close()
 
-def NES_QAM_plot(voltage_buffer, U_buffer, V_buffer, emphasis, luma, hue, sequence_counter):
+def composite_QAM_plot(voltage_buffer,
+    U_buffer,
+    V_buffer,
+    emphasis,
+    luma,
+    hue,
+    sequence_counter,
+    args=None,
+    signal_black_point=None,
+    signal_white_point=None):
+
+    import matplotlib.pyplot as plt
+    import matplotlib.gridspec as gridspec
+
     fig = plt.figure(tight_layout=True)
     gs = gridspec.GridSpec(3, 2)
 
@@ -564,8 +439,404 @@ def NES_QAM_plot(voltage_buffer, U_buffer, V_buffer, emphasis, luma, hue, sequen
         plt.show()
     plt.close()
 
+def composite_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counter, args=None):
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure(tight_layout=True)
+    fig.suptitle("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
+    ax = fig.subplots()
+    x = np.arange(0,12)
+    y = voltage_buffer
+    ax.axis([0, 12, 0, 1.5])
+    ax.set_xlabel("Sample count")
+    ax.set_ylabel("Voltage")
+    ax.plot(x, y, 'o-', linewidth=0.7)
+    
+    fig.set_size_inches(16, 9)
+    if (args.render_img is not None):
+        plt.savefig("docs/waveform phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=120)
+    else:
+        plt.show()
+    plt.close()
+
+def normalize_RGB(RGB_buffer, args=None):
+    # clip takes priority over normalize
+    if (args.clip is not None):
+        match args.clip:
+            case "darken":
+                RGB_buffer = color_clip_darken(RGB_buffer)
+            case "desaturate":
+                RGB_buffer = color_clip_desaturate(RGB_buffer)
+    elif (args.normalize is not None):
+        if (args.normalize != "scale clip negative"):
+            RGB_buffer -= np.amin(RGB_buffer)
+        RGB_buffer /= np.amax(RGB_buffer)
+
+    # clip to 0.0-1.0 to ensure everything is within range
+    np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
+
+def color_clip_darken(RGB_buffer):
+    for luma in range(RGB_buffer.shape[0]):
+        for chroma in range(RGB_buffer.shape[1]):
+            # if any of the RGB channels are greater than 1
+            if np.any(np.greater(RGB_buffer[luma, chroma], [1.0, 1.0, 1.0])):
+                # subtract all channels by delta of greatest channel
+                # algorithm by DragWx
+                darken_factor = np.max(RGB_buffer[luma, chroma])
+                RGB_buffer[luma, chroma] /= darken_factor
+    return RGB_buffer
+
+def color_clip_desaturate(RGB_buffer):
+    for luma in range(RGB_buffer.shape[0]):
+        for chroma in range(RGB_buffer.shape[1]):
+            # if any of the RGB channels are greater than 1
+            if np.any(np.greater(RGB_buffer[luma, chroma], [1.0, 1.0, 1.0])):
+                # desaturate that specific color until channels are within range
+                # algorithm by DragWx
+                darken_factor = np.max(RGB_buffer[luma, chroma])
+                YUV_calc = np.matmul(RGB_to_YUV, RGB_buffer[luma, chroma])
+                RGB_buffer[luma, chroma] -= YUV_calc[0]
+                RGB_buffer[luma, chroma] /= darken_factor
+                RGB_buffer[luma, chroma] += YUV_calc[0]
+    return RGB_buffer
+
+# B-Y and R-Y reduction factors
+BY_rf = 0.492111
+RY_rf = 0.877283
+
+# derived from the NTSC base matrix of luminance and color-difference
+RGB_to_YUV = np.array([
+    [ 0.299,        0.587,        0.114],
+    [-0.299*BY_rf, -0.587*BY_rf,  0.886*BY_rf],
+    [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
+], np.float64)
+
+# signal LUTs
+# voltage highs and lows
+# from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
+# signal[4][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
+signal_table_composite = np.array([
+    [
+        [ 0.616, 0.500 ],
+        [ 0.228, 0.192 ]
+    ],
+    [
+        [ 0.840, 0.676 ],
+        [ 0.312, 0.256 ]
+    ],
+    [
+        [ 1.100, 0.896 ],
+        [ 0.552, 0.448 ]
+    ],
+    [
+        [ 1.100, 0.896 ],
+        [ 0.880, 0.712 ]
+    ]
+], np.float64)
+
+def pixel_codec_composite(RGB_buffer, args=None, signal_black_point=None, signal_white_point=None):
+    # used for image sequence plotting
+    sequence_counter = 0
+
+    colorburst_phase = 8
+    if (args.ppu == "2C07"):
+        colorburst_phase += 0.5
+    # due to the way the waveform is encoded, the hue is off by 1/2 of a sample
+    colorburst_offset = colorburst_phase - 6 - 0.5
+
+    colorburst_factor = 6
+    color_gen_clock_factor = 2
+    buffer_size = int(colorburst_factor * color_gen_clock_factor)
+
+    # signal buffers for decoding
+    # 111111------
+    # 22222------2
+    # 3333------33
+    # 444------444
+    # 55------5555
+    # 6------66666
+    # ------777777
+    # -----888888-
+    # ----999999--
+    # ---AAAAAA---
+    # --BBBBBB----
+    # -CCCCCC-----
+
+    voltage_buffer = np.empty([buffer_size], np.float64)
+    U_buffer = np.empty([buffer_size], np.float64)
+    V_buffer = np.empty([buffer_size], np.float64)
+
+    for emphasis in range(8):
+        # emphasis bitmask, travelling from lsb to msb
+        emphasis_wave = 0
+        if bool(emphasis & 0b001):		# tint R; aligned to color phase C
+            emphasis_wave |= 0b000001111110;
+        if bool(emphasis & 0b010):		# tint G; aligned to color phase 4
+            emphasis_wave |= 0b111000000111;
+        if bool(emphasis & 0b100):		# tint B; aligned to color phase 8
+            emphasis_wave |= 0b011111100000;
+
+        for luma in range(4):
+            for hue in range(16):
+                # encode voltages into composite waveform
+                for wave_phase in range(12):
+                    # 0 = waveform high; 1 = waveform low
+                    n_wave_level = 0
+                    # 1 = emphasis activate
+                    emphasis_level = int(bool(emphasis_wave & (1 << ((wave_phase - hue + 1) % 12))))
+
+                    if (wave_phase >= 6): n_wave_level = 1
+
+                    # rows $x0 amd $xD
+                    if (hue == 0x00): n_wave_level = 0
+                    if (hue == 0x0D): n_wave_level = 1
+
+                    #rows $xE-$xF
+                    if (hue >= 0x0E):
+                        voltage_buffer[wave_phase] = signal_table_composite[1, 1, 0]
+                    else:
+                        voltage_buffer[(wave_phase - hue + 1) % 12] = signal_table_composite[luma, n_wave_level, emphasis_level]
+
+                # apply analog effects
+                antiemphasis_column_chroma = (
+                    args.antiemphasis_phase_skew if (
+                        hue == 0x2 or
+                        hue == 0x6 or
+                        hue == 0xA)
+                    else 0)
+                emphasis_row_luma = (
+                    args.emphasis_luma_attenuation if (
+                        hue == 0x4 or
+                        hue == 0x8 or
+                        hue == 0xC)
+                    else 0)
+
+                # decode voltage buffer to YUV
+                # we use RGB_buffer[] as a temporary buffer for YUV
+
+                # decode Y
+                RGB_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer) + emphasis_row_luma
+
+                # decode U
+                for t in range(12):
+                    U_buffer[t] = voltage_buffer[t] * np.sin(
+                        2 * np.pi / 12 * (t + colorburst_offset) +
+                        np.radians(
+                            args.hue + antiemphasis_column_chroma -
+                            (args.phase_skew * luma))
+                    ) * 2
+                RGB_buffer[emphasis, luma, hue, 1] = np.average(U_buffer) * (args.saturation + 1)
+
+                # decode V
+                for t in range(12):
+                    V_buffer[t] = voltage_buffer[t] * np.cos(
+                        2 * np.pi / 12 * (t + colorburst_offset) +
+                        np.radians(
+                            args.hue + antiemphasis_column_chroma -
+                            (args.phase_skew * luma))
+                    ) * 2
+                RGB_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
+
+                # decode YUV to RGB
+                RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), RGB_buffer[emphasis, luma, hue])
+
+                # visualize chroma decoding
+                if (args.debug):
+                    print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
+                if (args.waveforms):
+                    composite_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counter, args)
+                if (args.phase_QAM):
+                    composite_QAM_plot(voltage_buffer, U_buffer, V_buffer, emphasis, luma, hue, sequence_counter, args, signal_black_point, signal_white_point)
+
+                sequence_counter += 1
+
+        if not (args.emphasis):
+            # clip unused emphasis space
+            RGB_buffer = np.split(RGB_buffer, 8, 0)[0]
+            break
+
+    return RGB_buffer
+
+def rgb_oct_triplet_to_float_array(signal_triplet, emphasis):
+    red = ((signal_triplet & 0xF00) >> 8) if not (emphasis & 0b001) else 7
+    green = ((signal_triplet & 0x0F0) >> 4) if not (emphasis & 0b010) else 7
+    blue = ((signal_triplet & 0x00F)) if not (emphasis & 0b100) else 7
+    return np.array([red, green, blue], np.float64)
+
+def pixel_codec_rgb(RGB_buffer, args=None):
+    signal_table_rgb = np.empty([0x40], np.uint16)
+    match args.ppu:
+        case "2C04-0000"|"2C04-0001"|"2C04-0002"|"2C04-0003"|"2C04-0004":
+            # 2C04 "sorted" PPU palette LUT
+            # from https://www.nesdev.org/wiki/PPU_palettes#2C04
+            signal_table_rgb = np.array([
+                0x333,0x014,0x006,0x326,0x403,0x503,0x510,0x420,0x320,0x120,0x031,0x040,0x022,0x111,0x003,0x020,
+                0x555,0x036,0x027,0x407,0x507,0x704,0x700,0x630,0x430,0x140,0x040,0x053,0x044,0x222,0x200,0x310,
+                0x777,0x357,0x447,0x637,0x707,0x737,0x740,0x750,0x660,0x360,0x070,0x276,0x077,0x444,0x000,0x000,
+                0x777,0x567,0x657,0x757,0x747,0x755,0x764,0x770,0x773,0x572,0x473,0x276,0x467,0x666,0x653,0x760 
+            ], np.uint16)
+        case _:
+            # RGB PPU palettes LUT
+            # from https://forums.nesdev.org/viewtopic.php?p=98955#p98955
+            signal_table_rgb = np.array([
+                0x333,0x014,0x006,0x326,0x403,0x503,0x510,0x420,0x320,0x120,0x031,0x040,0x022,0x000,0x000,0x000,
+                0x555,0x036,0x027,0x407,0x507,0x704,0x700,0x630,0x430,0x140,0x040,0x053,0x044,0x000,0x000,0x000,
+                0x777,0x357,0x447,0x637,0x707,0x737,0x740,0x750,0x660,0x360,0x070,0x276,0x077,0x000,0x000,0x000,
+                0x777,0x567,0x657,0x757,0x747,0x755,0x764,0x772,0x773,0x572,0x473,0x276,0x467,0x000,0x000,0x000
+            ], np.uint16)
+
+    IQ_tilt = np.radians(33)
+    RGB_to_YIQ = np.array([
+        RGB_to_YUV[0,:],
+        ((RGB_to_YUV[1,:] * np.cos(IQ_tilt)) - (RGB_to_YUV[2,:]*np.sin(IQ_tilt))),
+        ((RGB_to_YUV[1,:] * np.sin(IQ_tilt)) + (RGB_to_YUV[2,:]*np.cos(IQ_tilt)))
+    ], np.float64)
+
+    # 2C04 LUTs
+    scramble = np.empty([0x40], np.uint8)
+    match args.ppu:
+        case "2C04-0001":
+            scramble = np.array([
+                0x35,0x23,0x16,0x22,0x1C,0x09,0x1D,0x15,0x20,0x00,0x27,0x05,0x04,0x28,0x08,0x20,
+                0x21,0x3E,0x1F,0x29,0x3C,0x32,0x36,0x12,0x3F,0x2B,0x2E,0x1E,0x3D,0x2D,0x24,0x01,
+                0x0E,0x31,0x33,0x2A,0x2C,0x0C,0x1B,0x14,0x2E,0x07,0x34,0x06,0x13,0x02,0x26,0x2E,
+                0x2E,0x19,0x10,0x0A,0x39,0x03,0x37,0x17,0x0F,0x11,0x0B,0x0D,0x38,0x25,0x18,0x3A
+            ], np.uint8)
+        case "2C04-0002":
+            scramble = np.array([
+                0x2E,0x27,0x18,0x39,0x3A,0x25,0x1C,0x31,0x16,0x13,0x38,0x34,0x20,0x23,0x3C,0x0B,
+                0x0F,0x21,0x06,0x3D,0x1B,0x29,0x1E,0x22,0x1D,0x24,0x0E,0x2B,0x32,0x08,0x2E,0x03,
+                0x04,0x36,0x26,0x33,0x11,0x1F,0x10,0x02,0x14,0x3F,0x00,0x09,0x12,0x2E,0x28,0x20,
+                0x3E,0x0D,0x2A,0x17,0x0C,0x01,0x15,0x19,0x2E,0x2C,0x07,0x37,0x35,0x05,0x0A,0x2D
+            ], np.uint8)
+        case "2C04-0003":
+            scramble = np.array([
+                0x14,0x25,0x3A,0x10,0x0B,0x20,0x31,0x09,0x01,0x2E,0x36,0x08,0x15,0x3D,0x3E,0x3C,
+                0x22,0x1C,0x05,0x12,0x19,0x18,0x17,0x1B,0x00,0x03,0x2E,0x02,0x16,0x06,0x34,0x35,
+                0x23,0x0F,0x0E,0x37,0x0D,0x27,0x26,0x20,0x29,0x04,0x21,0x24,0x11,0x2D,0x2E,0x1F,
+                0x2C,0x1E,0x39,0x33,0x07,0x2A,0x28,0x1D,0x0A,0x2E,0x32,0x38,0x13,0x2B,0x3F,0x0C
+            ], np.uint8)
+        case "2C04-0004":
+            scramble = np.array([
+                0x18,0x03,0x1C,0x28,0x2E,0x35,0x01,0x17,0x10,0x1F,0x2A,0x0E,0x36,0x37,0x0B,0x39,
+                0x25,0x1E,0x12,0x34,0x2E,0x1D,0x06,0x26,0x3E,0x1B,0x22,0x19,0x04,0x2E,0x3A,0x21,
+                0x05,0x0A,0x07,0x02,0x13,0x14,0x00,0x15,0x0C,0x3D,0x11,0x0F,0x0D,0x38,0x2D,0x24,
+                0x33,0x20,0x08,0x16,0x3F,0x2B,0x20,0x3C,0x2E,0x27,0x23,0x31,0x29,0x32,0x2C,0x09
+            ], np.uint8)
+        case _:
+            scramble = np.arange(0x00, 0x40)
+
+    for emphasis in range(8):
+        for luma in range(4):
+            for hue in range(16):
+                color_byte = (luma << 4) | hue
+                # decode voltage buffer to YUV
+                RGB_buffer[emphasis, luma, hue] = rgb_oct_triplet_to_float_array(signal_table_rgb[scramble[color_byte]], emphasis) / 7
+
+                # encode RGB to YIQ?
+                RGB_buffer[emphasis, luma, hue] = np.matmul(RGB_to_YIQ, RGB_buffer[emphasis, luma, hue])
+                # Titler functionality
+                if (args.ppu == "2C05-99"):
+                    # reduce Q component by half
+                    RGB_buffer[emphasis, luma, hue, 2] *= 0.5
+
+                # apply saturation
+                RGB_buffer[emphasis, luma, hue, 1] *= (args.saturation + 1)
+                RGB_buffer[emphasis, luma, hue, 2] *= (args.saturation + 1)
+                
+                # apply hue
+                RGB_buffer[emphasis, luma, hue, 1] = (
+                    (RGB_buffer[emphasis, luma, hue, 1] * np.cos(np.radians(args.hue))) -
+                    (RGB_buffer[emphasis, luma, hue, 2] * np.sin(np.radians(args.hue)))
+                )
+                RGB_buffer[emphasis, luma, hue, 2] = (
+                    (RGB_buffer[emphasis, luma, hue, 1] * np.sin(np.radians(args.hue))) +
+                    (RGB_buffer[emphasis, luma, hue, 2] * np.cos(np.radians(args.hue)))
+                )
+                
+                # decode back to RGB
+                RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YIQ), RGB_buffer[emphasis, luma, hue])
+
+        if not (args.emphasis):
+            # clip unused emphasis space
+            RGB_buffer = np.split(RGB_buffer, 8, 0)[0]
+            break
+
+    return RGB_buffer
+
+def output_binary_uint8(RGB_buffer, args=None):
+    with open(args.output, mode="wb") as Palette_file:
+        Palette_file.write(np.uint8(np.around(RGB_buffer * 0xFF)))
+
+def output_double_uint8(RGB_buffer, args=None):
+    with open(args.output, mode="wb") as Palette_file:
+        Palette_file.write(RGB_buffer)
+
+def output_jasc_pal(RGB_buffer, args=None):
+    with open(args.output, mode="wt", newline='\n') as Palette_file:
+        Palette_file.write("JASC-PAL\n0100")
+        Palette_file.write(f"\n{int(RGB_buffer.size/3)}")
+
+        # JASC-PAL stops loading when it encounters #000000??
+        black_entry_exists = False
+
+        for luma in range(RGB_buffer.shape[0]):
+            for hue in range(RGB_buffer.shape[1]):
+                if (RGB_buffer[luma, hue, :].all() != 0):
+                    Palette_file.write(
+                        "\n{0:0d} {1:0d} {2:0d}".format(
+                            np.uint8(np.around(RGB_buffer[luma, hue, 0] * 0xFF)),
+                            np.uint8(np.around(RGB_buffer[luma, hue, 1] * 0xFF)),
+                            np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF))))
+                else:
+                    black_entry_exists = True
+        if black_entry_exists:
+            Palette_file.write("\n0, 0, 0")
+
+def output_html_hex(RGB_buffer, args=None):
+    with open(args.output, mode="wt", newline='\n') as Palette_file:
+        for luma in range(RGB_buffer.shape[0]):
+            for hue in range(RGB_buffer.shape[1]):
+                Palette_file.write(
+                    "#{0:02X}{1:02X}{2:02X}".format(
+                        np.uint8(np.around(RGB_buffer[luma, hue, 0] * 0xFF)),
+                        np.uint8(np.around(RGB_buffer[luma, hue, 1] * 0xFF)),
+                        np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF))))
+            Palette_file.write("\n")
+
+def output_mediawiki_table(RGB_buffer, args=None):
+    with open(args.output, mode="wt", newline='\n') as Palette_file:
+        Palette_file.write("{|class=\"wikitable\"\n")
+        for luma in range(RGB_buffer.shape[0]):
+            Palette_file.write("|-\n")
+            for hue in range(RGB_buffer.shape[1]):
+                color_r = int(np.around(RGB_buffer[luma, hue, 0] * 0xFF))
+                color_g = int(np.around(RGB_buffer[luma, hue, 1] * 0xFF))
+                color_b = int(np.around(RGB_buffer[luma, hue, 2] * 0xFF))
+                contrast = 0xFFF if ((color_r*299 + color_g*587 + color_b*114) <= 127500) else 0x000
+                Palette_file.write("|style=\"border:0px;background-color:#{0:02X}{1:02X}{2:02X};width:32px;height:32px;color:#{3:03x};text-align:center\"|${4:02X}\n".format(
+                    color_r,
+                    color_g,
+                    color_b,
+                    contrast,
+                    ((luma << 4) + hue)))
+        Palette_file.write("|}\n")
+
+def output_cstyle_table(RGB_buffer, args=None):
+    with open(args.output, mode="wt", newline='\n') as Palette_file:
+        for luma in range(RGB_buffer.shape[0]):
+            for hue in range(RGB_buffer.shape[1]):
+                Palette_file.write(
+                    "0x{0:02x}, 0x{1:02x}, 0x{2:02x},\n".format(
+                        np.uint8(np.around(RGB_buffer[luma, hue, 0] * 0xFF)),
+                        np.uint8(np.around(RGB_buffer[luma, hue, 1] * 0xFF)),
+                        np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF))))
+            Palette_file.write("\n")
+
+
 # debugging, don't mind this
-def NES_SMPTE_plot(RGB_uncorrected, emphasis):
+def NES_SMPTE_plot(RGB_uncorrected, emphasis, args=None):
+    import matplotlib.pyplot as plt
     if (args.skip_plot):
         return
     if not args.emphasis:
@@ -636,253 +907,177 @@ def NES_SMPTE_plot(RGB_uncorrected, emphasis):
     plt.show()
     plt.close()
 
-def NES_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counter):
-    fig = plt.figure(tight_layout=True)
-    fig.suptitle("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
-    ax = fig.subplots()
-    x = np.arange(0,12)
-    y = voltage_buffer
-    ax.axis([0, 12, 0, 1.5])
-    ax.set_xlabel("Sample count")
-    ax.set_ylabel("Voltage")
-    ax.plot(x, y, 'o-', linewidth=0.7)
-    
-    fig.set_size_inches(16, 9)
-    if (args.render_img is not None):
-        plt.savefig("docs/waveform phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=120)
-    else:
-        plt.show()
-    plt.close()
+def main(argv=None):
+    args = parse_argv(argv or sys.argv)
 
-def normalize_RGB(RGB_buffer):
-    # clip takes priority over normalize
-    if (args.normalize != -1):
-        match args.normalize:
-            case 0:
-                RGB_buffer -= np.amin(RGB_buffer)
-                RGB_buffer /= np.amax(RGB_buffer)
-            case 1:
-                RGB_buffer /= np.amax(RGB_buffer)
+    if (args.skip_plot) and (args.output is None) and not (args.render_img is not None):
+        sys.exit("warning! palette is generated but not plotted or outputted")
+
+    # special thanks to NewRisingSun for teaching me how chromatic adaptations work!
+    # special thanks to _aitchFactor for pointing out that colour-science has
+    # chromatic adaptation functions!
+
+    # reference color profile colorspace
+    s_colorspace = colour.RGB_Colourspace(
+        colour.RGB_COLOURSPACES[args.reference_colorspace].name,
+        colour.RGB_COLOURSPACES[args.reference_colorspace].primaries,
+        colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint)
+
+    if (args.reference_primaries_r is not None
+        and args.reference_primaries_g is not None
+        and args.reference_primaries_b is not None):
+        s_colorspace.name = "custom primaries"
+        s_colorspace.primaries = np.array([
+            args.reference_primaries_r,
+            args.reference_primaries_g,
+            args.reference_primaries_b
+        ])
+    else:
+        s_colorspace.name = colour.RGB_COLOURSPACES[args.reference_colorspace].name
+        s_colorspace.primaries = colour.RGB_COLOURSPACES[args.reference_colorspace].primaries
+
+    if (args.reference_primaries_w is not None):
+        s_colorspace.whitepoint = args.reference_primaries_w
+        s_colorspace.whitepoint_name = "custom whitepoint"
+    else:
+        s_colorspace.whitepoint_name = colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint_name
+        s_colorspace.whitepoint = colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint
+
+    # display color profile colorspace
+    t_colorspace = colour.RGB_Colourspace(
+        colour.RGB_COLOURSPACES[args.display_colorspace].name,
+        colour.RGB_COLOURSPACES[args.display_colorspace].primaries,
+        colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint)
+
+    if (args.display_primaries_r is not None
+        and args.display_primaries_g is not None
+        and args.display_primaries_b is not None): 
+        t_colorspace.name = "custom primaries"
+        t_colorspace.primaries = np.array([
+            args.display_primaries_r,
+            args.display_primaries_g,
+            args.display_primaries_b
+        ])
+    else:
+        t_colorspace.name = colour.RGB_COLOURSPACES[args.display_colorspace].name
+        t_colorspace.primaries = colour.RGB_COLOURSPACES[args.display_colorspace].primaries
+
+    if (args.display_primaries_w is not None):
+        t_colorspace.whitepoint = args.display_primaries_w
+        t_colorspace.whitepoint_name = "custom whitepoint"
+    else:
+        t_colorspace.whitepoint_name = colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint_name
+        t_colorspace.whitepoint = colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint
+
+    s_colorspace.name = "Reference colorspace: {}".format(s_colorspace.name)
+    t_colorspace.name = "Display colorspace: {}".format(t_colorspace.name)
+
+    # decoded RGB buffer
+    # has to be zero'd out for the normalize function to work
+    RGB_buffer = np.zeros([8,4,16,3], np.float64)
+    signal_black_point = 0
+    signal_white_point = 1
+    # generate color!
+    match args.ppu:
+        case "2C03"|"2C04-0000"|"2C04-0001"|"2C04-0002"|"2C04-0003"|"2C04-0004"|"2C05-99":
+            # signal buffer normalization
+            if (args.black_point is not None):
+                signal_black_point = args.black_point
+            else:
+                signal_black_point = 0
+
+            if (args.white_point is not None):
+                signal_white_point = 1 + args.white_point
+            else:
+                signal_white_point = 1
+            RGB_buffer = pixel_codec_rgb(RGB_buffer, args)
+        case "2C02"|"2C07":
+            # signal buffer normalization
+            if (args.black_point is not None):
+                signal_black_point = signal_table_composite[1, 1, 0] + args.black_point
+            else:
+                signal_black_point = signal_table_composite[1, 1, 0]
+
+            if (args.white_point is not None):
+                signal_white_point = signal_table_composite[1, 1, 0] + args.white_point
+            else:
+                signal_white_point = signal_table_composite[3, 0, 0]
+            RGB_buffer = pixel_codec_composite(RGB_buffer, args, signal_black_point, signal_white_point)
+
+    # reshape buffer after encoding
+    if (args.emphasis):
+        RGB_buffer = np.reshape(RGB_buffer,(32, 16, 3))
+    else:
+        RGB_buffer = np.reshape(RGB_buffer,(4, 16, 3))
+
+    # apply black and white points, brightness, and contrast
+    RGB_buffer -= signal_black_point
+    RGB_buffer /= (signal_white_point - signal_black_point)
+    RGB_buffer += args.brightness
+    RGB_buffer *= (args.contrast + 1)
+
+    # debug: a rough vectorscope plot
+    # NES_SMPTE_plot(RGB_buffer, 0, args, plt)
+
+    # fit RGB within range of 0.0-1.0
+    normalize_RGB(RGB_buffer, args)
+
+    # preserve uncorrected RGB for color plotting
+    RGB_uncorrected = RGB_buffer
+
+    # convert RGB to display output
+
+    # convert linear signal to linear light
+    RGB_buffer = colour.oetf_inverse(RGB_buffer, function=args.opto_electronic)
+    RGB_uncorrected = colour.oetf_inverse(RGB_uncorrected, function=args.opto_electronic)
+
+    # transform color primaries
+    if (args.inverse_chromatic_transform):
+        RGB_buffer = colour.RGB_to_RGB(
+            RGB_buffer,
+            t_colorspace,
+            s_colorspace,
+            chromatic_adaptation_transform=args.chromatic_adaptation_transform)
+    else:
+        RGB_buffer = colour.RGB_to_RGB(
+            RGB_buffer,
+            s_colorspace,
+            t_colorspace,
+            chromatic_adaptation_transform=args.chromatic_adaptation_transform)
+
+    # convert linear light to linear signal, if permitted
+    if (not args.linear_light):
+        RGB_buffer = colour.oetf(RGB_buffer, function=args.opto_electronic)
+        RGB_uncorrected = colour.oetf(RGB_uncorrected, function=args.opto_electronic)
+
+    # clip again, the transform may produce values beyond 0-1
+    normalize_RGB(RGB_buffer, args)
+    normalize_RGB(RGB_uncorrected, args)
+
+    if (args.output is not None):
+        match args.file_format:
+            case "binary uint8_t palette":
+                output_binary_uint8(RGB_buffer, args)
+            case "binary double palette":
+                output_double_uint8(RGB_buffer, args)
+            case "text Jasc Paint Shop Pro Palette .pal file":
+                output_jasc_pal(RGB_buffer, args)
+            case "text HTML hex triplet values":
+                output_html_hex(RGB_buffer, args)
+            case "text NESDev MediaWiki table":
+                output_mediawiki_table(RGB_buffer, args)
+            case "text C-style unsigned int table":
+                output_cstyle_table(RGB_buffer, args)
             case _:
-                print("normalize option not recognized, using default")
-                RGB_buffer -= np.amin(RGB_buffer)
-                RGB_buffer /= (np.amax(RGB_buffer) - np.amin(RGB_buffer))
-    else:
-        match args.clip:
-            case 1:
-                RGB_buffer = color_clip_darken(RGB_buffer)
-            case 2:
-                RGB_buffer = color_clip_desaturate(RGB_buffer)
+                sys.exit("warning! palette output is unknown")
 
-    # clip to 0.0-1.0 to ensure everything is within range
-    np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
+    if (args.render_img is not None):
+        for emphasis in range(8):
+            palette_plot(RGB_buffer, RGB_uncorrected, emphasis, False, (args.render_img is not None), args, s_colorspace, t_colorspace)
+            if not (args.emphasis):
+                break
 
+    palette_plot(RGB_buffer, RGB_uncorrected, 0, True, False, (args.render_img is not None), args, s_colorspace, t_colorspace)
 
-for emphasis in range(8):
-    # emphasis bitmask, travelling from lsb to msb
-    emphasis_wave = 0
-    if bool(emphasis & 0b001):		# tint R; aligned to color phase C
-        emphasis_wave |= 0b000001111110;
-    if bool(emphasis & 0b010):		# tint G; aligned to color phase 4
-        emphasis_wave |= 0b111000000111;
-    if bool(emphasis & 0b100):		# tint B; aligned to color phase 8
-        emphasis_wave |= 0b011111100000;
-
-    # 111111------
-    # 22222------2
-    # 3333------33
-    # 444------444
-    # 55------5555
-    # 6------66666
-    # ------777777
-    # -----888888-
-    # ----999999--
-    # ---AAAAAA---
-    # --BBBBBB----
-    # -CCCCCC-----
-    # signal buffer for decoding
-    voltage_buffer = np.empty([12], np.float64)
-    U_buffer = np.empty([12], np.float64)
-    V_buffer = np.empty([12], np.float64)
-
-    for luma in range(4):
-        for hue in range(16):
-            # encode voltages into composite waveform
-            for wave_phase in range(12):
-                # 0 = waveform high; 1 = waveform low
-                n_wave_level = 0
-                # 1 = emphasis activate
-                emphasis_level = int(bool(emphasis_wave & (1 << ((wave_phase - hue + emphasis_offset) % 12))))
-
-                if (wave_phase >= 6): n_wave_level = 1
-
-                # rows $x0 amd $xD
-                if (hue == 0x00): n_wave_level = 0
-                if (hue == 0x0D): n_wave_level = 1
-
-                #rows $xE-$xF
-                if (hue >= 0x0E):
-                    voltage_buffer[wave_phase] = signal_table[1, 1, 0]
-                else:
-                    voltage_buffer[(wave_phase - hue + offset) % 12] = signal_table[luma, n_wave_level, emphasis_level]
-
-            # TODO: better filter voltage buffer
-
-            # convolution approach
-            # kernel = np.array([0.25, 0.75, 1, -0.2, -0.05, 0], np.float64)
-            # voltage_buffer = np.delete(np.convolve(voltage_buffer, kernel), [0, 13, 14, 15, 16])
-
-            # fft approach
-            # voltage_buffer = np.fft.fft(voltage_buffer)
-            # kernel = np.array([1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], np.float64)
-            # voltage_buffer *= kernel
-            # voltage_buffer = np.fft.ifft(voltage_buffer).real
-
-            # apply analog effects
-            antiemphasis_column_chroma = args.antiemphasis_phase_skew if (hue == 0x2 or hue == 0x6 or hue == 0xA) else 0
-            emphasis_row_luma = args.emphasis_luma_attenuation if (hue == 0x4 or hue == 0x8 or hue == 0xC) else 0
-
-            # normalize voltage
-
-            # decode voltage buffer to YUV
-            # we use RGB_buffer[] as a temporary buffer for YUV
-
-            # decode Y
-            RGB_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer) + emphasis_row_luma
-
-            # decode U
-            for t in range(12):
-                U_buffer[t] = voltage_buffer[t] * np.sin(
-                    2 * np.pi / 12 * (t + colorburst_offset) +
-                    np.radians(args.hue + antiemphasis_column_chroma -
-                    (args.phase_skew * luma))) * 2
-            RGB_buffer[emphasis, luma, hue, 1] = np.average(U_buffer) * (args.saturation + 1)
-
-            # decode V
-            for t in range(12):
-                V_buffer[t] = voltage_buffer[t] * np.cos(
-                    2 * np.pi / 12 * (t + colorburst_offset) +
-                    np.radians(args.hue + antiemphasis_column_chroma -
-                    (args.phase_skew * luma))) * 2
-            RGB_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
-
-            # decode YUV to RGB
-            RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), RGB_buffer[emphasis, luma, hue])
-
-            # visualize chroma decoding
-            if (args.debug):
-                print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
-            if (args.waveforms):
-                NES_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counter)
-            if (args.phase_QAM):
-                NES_QAM_plot(voltage_buffer, U_buffer, V_buffer, emphasis, luma, hue, sequence_counter)
-
-            sequence_counter += 1
-    if not (args.emphasis):
-        break
-
-
-# apply black and white points, brightness, and contrast
-RGB_buffer -= signal_black_point
-RGB_buffer /= (signal_white_point - signal_black_point)
-RGB_buffer += args.brightness
-RGB_buffer *= (args.contrast + 1)
-
-# debug: a rough vectorscope plot
-# NES_SMPTE_plot(RGB_buffer, 0)
-
-# fit RGB within range of 0.0-1.0
-normalize_RGB(RGB_buffer)
-
-# preserve uncorrected RGB for color plotting
-RGB_uncorrected = RGB_buffer
-
-# convert RGB to display output
-
-# convert linear signal to linear light
-RGB_buffer = colour.oetf_inverse(RGB_buffer, function=args.opto_electronic)
-RGB_uncorrected = colour.oetf_inverse(RGB_uncorrected, function=args.opto_electronic)
-
-# transform color primaries
-if (args.inverse_chromatic_transform):
-    RGB_buffer = colour.RGB_to_RGB(
-        RGB_buffer,
-        t_colorspace,
-        s_colorspace,
-        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
-else:
-    RGB_buffer = colour.RGB_to_RGB(
-        RGB_buffer,
-        s_colorspace,
-        t_colorspace,
-        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
-
-# convert linear light to linear signal, if permitted
-if (not args.linear_light):
-    RGB_buffer = colour.oetf(RGB_buffer, function=args.opto_electronic)
-    RGB_uncorrected = colour.oetf(RGB_uncorrected, function=args.opto_electronic)
-
-# clip again, the transform may produce values beyond 0-1
-normalize_RGB(RGB_buffer)
-normalize_RGB(RGB_uncorrected)
-
-# display data about the palette, and optionally write a .pal file
-if (args.emphasis):
-    RGB_buffer = np.reshape(RGB_buffer,(32, 16, 3))
-    RGB_uncorrected = np.reshape(RGB_uncorrected,(32, 16, 3))
-else:
-    # crop non-emphasis colors if not enabled
-    RGB_buffer = RGB_buffer[0]
-    RGB_uncorrected = RGB_uncorrected[0]
-
-if (args.output is not None):
-    with open(args.output, mode="wb") as Palette_file:
-        Palette_file.write(np.uint8(np.around(RGB_buffer * 0xFF)))
-
-if (args.float_pal is not None):
-    with open(args.float_pal, mode="wb") as Palette_file:
-        Palette_file.write(RGB_buffer)
-
-if (args.html_hex):
-    for luma in range(RGB_buffer.shape[0]):
-        for hue in range(16):
-            print(
-                "#{0:02X}{1:02X}{2:02X}".format(
-                    np.uint8(np.around(RGB_buffer[luma, hue, 0] * 0xFF)),
-                    np.uint8(np.around(RGB_buffer[luma, hue, 1] * 0xFF)),
-                    np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF))))
-        print("")
-
-if (args.wiki_table):
-    print("{|class=\"wikitable\"")
-    for luma in range(4):
-        print("|-")
-        for hue in range(16):
-            color_r = int(np.around(RGB_buffer[luma, hue, 0] * 0xFF))
-            color_g = int(np.around(RGB_buffer[luma, hue, 1] * 0xFF))
-            color_b = int(np.around(RGB_buffer[luma, hue, 2] * 0xFF))
-            contrast = 0xFFF if ((color_r*299 + color_g*587 + color_b*114) <= 127500) else 0x000
-            print("|style=\"border:0px;background-color:#{0:02X}{1:02X}{2:02X};width:32px;height:32px;color:#{3:03x};text-align:center\"|${4:02X}".format(
-                color_r,
-                color_g,
-                color_b,
-                contrast,
-                ((luma << 4) + hue)))
-    print("|}")
-if (args.c_table):
-    for luma in range(RGB_buffer.shape[0]):
-        for hue in range(16):
-            print(
-                "0x{0:02x}, 0x{1:02x}, 0x{2:02x},".format(
-                    np.uint8(np.around(RGB_buffer[luma, hue, 0] * 0xFF)),
-                    np.uint8(np.around(RGB_buffer[luma, hue, 1] * 0xFF)),
-                    np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF))))
-        print("")
-
-if (args.render_img is not None):
-    for emphasis in range(8):
-        NES_palette_plot(RGB_buffer, RGB_uncorrected, emphasis, False, (args.render_img is not None))
-        if not (args.emphasis):
-            break
-
-NES_palette_plot(RGB_buffer, RGB_uncorrected, 0, True, False, (args.render_img is not None))
+if __name__=='__main__':
+    main()
