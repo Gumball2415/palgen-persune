@@ -8,4 +8,4 @@ palgen-persune.py --skip-plot -aps 5 -ela 0.01429 -e -hue 0 -whp 0.7678571428571
 palgen-persune.py --skip-plot -aps 5 -ela 0.01429 -e -hue 0 -whp 0.71428571428571428571428571428571 -o docs/example_palettes/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_MJ.pal
 palgen-persune.py --skip-plot -ela 0.01429 -ppu "2C07" -blp 0.05357142857142857142857142857143 -e -o docs/example_palettes/2C07_ela_PAL.pal
 palgen-persune.py --skip-plot -ppu "2C03" -e -o docs/example_palettes/2C03_RGB.pal
-palgen-persune.py --skip-plot -ppu "2C05-99" -sat -0.1 -e -o docs/example_palettes/2C05-99_composite_forple.pal
+palgen-persune.py --skip-plot -ppu "2C05-99" -sat -0.2 -e -o docs/example_palettes/2C05-99_composite_forple.pal
