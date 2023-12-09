@@ -730,7 +730,7 @@ def pixel_codec_rgb(RGB_buffer, args=None):
         for luma in range(4):
             for hue in range(16):
                 color_byte = (luma << 4) | hue
-                # decode voltage buffer to YUV
+                # decode voltage buffer to RGB
                 RGB_buffer[emphasis, luma, hue] = rgb_oct_triplet_to_float_array(signal_table_rgb[scramble[color_byte]], emphasis) / 7
 
                 # encode RGB to YIQ?
