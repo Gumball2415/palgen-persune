@@ -26,7 +26,7 @@ import colour.plotting.diagrams
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
         description="yet another NES palette generator",
-        epilog="version 0.9.0")
+        epilog="version 0.9.1")
     # output options
     parser.add_argument(
         "-d",
@@ -46,15 +46,17 @@ def parse_argv(argv):
         "-f",
         "--file-format",
         choices=[
-            "binary uint8 palette",
-            "binary double palette",
-            "text Jasc Paint Shop Pro Palette .pal file",
-            "text HTML hex triplet values",
-            "text NESDev MediaWiki table",
-            "text C-style unsigned int table",
+            ".pal uint8",
+            ".pal double",
+            ".pal Jasc",
+            ".gpl",
+            ".png",
+            ".txt HTML hex",
+            ".txt MediaWiki",
+            ".h uint8_t",
         ],
-        default="binary uint8_t palette",
-        help="file output format. default = \"binary uint8 palette\"")
+        default=".pal uint8",
+        help="file output format. default = \".pal uint8\"")
     parser.add_argument(
         "-e",
         "--emphasis",
@@ -765,15 +767,49 @@ def pixel_codec_rgb(RGB_buffer, args=None):
     return RGB_buffer
 
 def output_binary_uint8(RGB_buffer, args=None):
-    with open(args.output, mode="wb") as Palette_file:
+    with open((os.path.splitext(args.output)[0] + ".pal"), mode="wb") as Palette_file:
         Palette_file.write(np.uint8(np.around(RGB_buffer * 0xFF)))
 
-def output_double_uint8(RGB_buffer, args=None):
-    with open(args.output, mode="wb") as Palette_file:
+def output_binary_double(RGB_buffer, args=None):
+    with open((os.path.splitext(args.output)[0] + ".pal"), mode="wb") as Palette_file:
         Palette_file.write(RGB_buffer)
 
+def output_gimp_pal(RGB_buffer, args=None):
+    with open((os.path.splitext(args.output)[0] + ".gpl"), mode="wt", newline='\n') as Palette_file:
+        Palette_file.write("GIMP Palette\n")
+        Palette_file.write("Name: generated NES/FC palette\n")
+        Palette_file.write(f"Columns: {RGB_buffer.shape[1]}\n")
+        Palette_file.write("# https://github.com/Gumball2415/palgen-persune")
+        for luma in range(RGB_buffer.shape[0]):
+            for hue in range(RGB_buffer.shape[1]):
+                color_byte = ((luma & 0x3) << 4) | hue
+                emphasis_byte = (luma >> 2) & 0x7
+                Palette_file.write(
+                    "\n{0:4d}{1:4d}{2:4d} ${3:02X} emphasis {4:03b}".format(
+                        np.uint8(np.around(RGB_buffer[luma, hue, 0] * 0xFF)),
+                        np.uint8(np.around(RGB_buffer[luma, hue, 1] * 0xFF)),
+                        np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF)),
+                        color_byte,
+                        emphasis_byte))
+
+def output_png(RGB_buffer, args=None):
+    if (args.emphasis):
+        sys.exit("error: this format does not support emphasis")
+    from PIL import Image, ImagePalette
+    imgindex = np.arange(0, int(RGB_buffer.size/3), dtype=np.uint8)
+    
+    img = Image.frombytes('P', (RGB_buffer.shape[1],RGB_buffer.shape[0]), imgindex)
+    # convert to list of uint8
+    RGB_buffer_uint8 = list(
+        np.uint8(
+            np.around(
+                RGB_buffer * 0xFF)).ravel())
+
+    img.putpalette(list(RGB_buffer_uint8), rawmode="RGB")
+    img.save((os.path.splitext(args.output)[0] + ".png"), optimize=True)
+
 def output_jasc_pal(RGB_buffer, args=None):
-    with open(args.output, mode="wt", newline='\n') as Palette_file:
+    with open((os.path.splitext(args.output)[0] + ".pal"), mode="wt", newline='\n') as Palette_file:
         Palette_file.write("JASC-PAL\n0100")
         Palette_file.write(f"\n{int(RGB_buffer.size/3)}")
 
@@ -791,21 +827,20 @@ def output_jasc_pal(RGB_buffer, args=None):
                 else:
                     black_entry_exists = True
         if black_entry_exists:
-            Palette_file.write("\n0, 0, 0")
+            Palette_file.write("\n0 0 0")
 
 def output_html_hex(RGB_buffer, args=None):
-    with open(args.output, mode="wt", newline='\n') as Palette_file:
+    with open((os.path.splitext(args.output)[0] + ".txt"), mode="wt", newline='\n') as Palette_file:
         for luma in range(RGB_buffer.shape[0]):
             for hue in range(RGB_buffer.shape[1]):
                 Palette_file.write(
-                    "#{0:02X}{1:02X}{2:02X}".format(
+                    "#{0:02X}{1:02X}{2:02X}\n".format(
                         np.uint8(np.around(RGB_buffer[luma, hue, 0] * 0xFF)),
                         np.uint8(np.around(RGB_buffer[luma, hue, 1] * 0xFF)),
                         np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF))))
-            Palette_file.write("\n")
 
 def output_mediawiki_table(RGB_buffer, args=None):
-    with open(args.output, mode="wt", newline='\n') as Palette_file:
+    with open((os.path.splitext(args.output)[0] + ".txt"), mode="wt", newline='\n') as Palette_file:
         Palette_file.write("{|class=\"wikitable\"\n")
         for luma in range(RGB_buffer.shape[0]):
             Palette_file.write("|-\n")
@@ -814,16 +849,17 @@ def output_mediawiki_table(RGB_buffer, args=None):
                 color_g = int(np.around(RGB_buffer[luma, hue, 1] * 0xFF))
                 color_b = int(np.around(RGB_buffer[luma, hue, 2] * 0xFF))
                 contrast = 0xFFF if ((color_r*299 + color_g*587 + color_b*114) <= 127500) else 0x000
+                color_byte = ((luma & 0x3) << 4) | hue
                 Palette_file.write("|style=\"border:0px;background-color:#{0:02X}{1:02X}{2:02X};width:32px;height:32px;color:#{3:03x};text-align:center\"|${4:02X}\n".format(
                     color_r,
                     color_g,
                     color_b,
                     contrast,
-                    ((luma << 4) + hue)))
+                    color_byte))
         Palette_file.write("|}\n")
 
 def output_cstyle_table(RGB_buffer, args=None):
-    with open(args.output, mode="wt", newline='\n') as Palette_file:
+    with open((os.path.splitext(args.output)[0] + ".h"), mode="wt", newline='\n') as Palette_file:
         for luma in range(RGB_buffer.shape[0]):
             for hue in range(RGB_buffer.shape[1]):
                 Palette_file.write(
@@ -832,7 +868,6 @@ def output_cstyle_table(RGB_buffer, args=None):
                         np.uint8(np.around(RGB_buffer[luma, hue, 1] * 0xFF)),
                         np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF))))
             Palette_file.write("\n")
-
 
 # debugging, don't mind this
 def NES_SMPTE_plot(RGB_uncorrected, emphasis, args=None):
@@ -977,6 +1012,7 @@ def main(argv=None):
     RGB_buffer = np.zeros([8,4,16,3], np.float64)
     signal_black_point = 0
     signal_white_point = 1
+
     # generate color!
     match args.ppu:
         case "2C03"|"2C04-0000"|"2C04-0001"|"2C04-0002"|"2C04-0003"|"2C04-0004"|"2C05-99":
@@ -1053,23 +1089,21 @@ def main(argv=None):
     # clip again, the transform may produce values beyond 0-1
     normalize_RGB(RGB_buffer, args)
     normalize_RGB(RGB_uncorrected, args)
-
+    
+    output_format = {
+        ".pal uint8": output_binary_uint8,
+        ".pal double": output_binary_double,
+        ".pal Jasc": output_jasc_pal,
+        ".txt HTML hex": output_html_hex,
+        ".txt MediaWiki": output_mediawiki_table,
+        ".h uint8_t": output_cstyle_table,
+        ".gpl": output_gimp_pal,
+        ".png": output_png
+        
+    }
     if (args.output is not None):
-        match args.file_format:
-            case "binary uint8_t palette":
-                output_binary_uint8(RGB_buffer, args)
-            case "binary double palette":
-                output_double_uint8(RGB_buffer, args)
-            case "text Jasc Paint Shop Pro Palette .pal file":
-                output_jasc_pal(RGB_buffer, args)
-            case "text HTML hex triplet values":
-                output_html_hex(RGB_buffer, args)
-            case "text NESDev MediaWiki table":
-                output_mediawiki_table(RGB_buffer, args)
-            case "text C-style unsigned int table":
-                output_cstyle_table(RGB_buffer, args)
-            case _:
-                sys.exit("warning! palette output is unknown")
+        output_format[args.file_format](RGB_buffer, args)
+  
 
     if (args.render_img is not None):
         for emphasis in range(8):

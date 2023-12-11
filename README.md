@@ -28,7 +28,7 @@ In the meantime, use **Python 3.11**.
 ## Usage
 ```
 usage: palgen-persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
-                         [-f {binary uint8 palette,binary double palette,text Jasc Paint Shop Pro Palette .pal file,text HTML hex triplet values,text NESDev MediaWiki table,text C-style unsigned int table}]
+                         [-f {.pal uint8,.pal double,.pal Jasc,.gpl,.png,.txt HTML hex,.txt MediaWiki,.h uint8_t}]
                          [-e] [-t TEST_IMAGE] [-r RENDER_IMG] [-w] [-p]
                          [-n {scale,scale clip negative}]
                          [-ppu {2C02,2C03,2C04-0000,2C04-0001,2C04-0002,2C04-0003,2C04-0004,2C05-99,2C07}]
@@ -57,8 +57,8 @@ options:
   --skip-plot           skips showing the palette plot
   -o OUTPUT, --output OUTPUT
                         file output path
-  -f {binary uint8 palette,binary double palette,text Jasc Paint Shop Pro Palette .pal file,text HTML hex triplet values,text NESDev MediaWiki table,text C-style unsigned int table}, --file-format {binary uint8 palette,binary double palette,text Jasc Paint Shop Pro Palette .pal file,text HTML hex triplet values,text NESDev MediaWiki table,text C-style unsigned int table}
-                        file output format. default = "binary uint8 palette"
+  -f {.pal uint8,.pal double,.pal Jasc,.gpl,.png,.txt HTML hex,.txt MediaWiki,.h uint8_t}, --file-format {.pal uint8,.pal double,.pal Jasc,.gpl,.png,.txt HTML hex,.txt MediaWiki,.h uint8_t}
+                        file output format. default = ".pal uint8"
   -e, --emphasis        include emphasis entries
   -t TEST_IMAGE, --test-image TEST_IMAGE
                         use 256x240 uint16 raw binary PPU frame buffer for
@@ -136,7 +136,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.9.0
+version 0.9.1
 ```
 
 ## License
