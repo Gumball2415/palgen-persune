@@ -26,7 +26,7 @@ import colour.plotting.diagrams
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
         description="yet another NES palette generator",
-        epilog="version 0.9.1")
+        epilog="version 0.9.2")
     # output options
     parser.add_argument(
         "-d",
@@ -208,9 +208,13 @@ def parse_argv(argv):
         help="applies \"colour.models\" opto-electronic transfer function to the palette, default = \"ITU-R BT.709\"",
         default = "ITU-R BT.709")
     parser.add_argument(
-        "--linear-light",
-        action="store_true",
-        help="skip converting linear light to linear signal")
+        "--opto-electronic-disable",
+        action = "store_true",
+        help = "disable converting linear light to linear signal")
+    parser.add_argument(
+        "--electro-optic-disable",
+        action = "store_true",
+        help = "disable converting linear signal to linear light")
 
     # colorimetry reference RGB and whitepoint primaries
     parser.add_argument(
@@ -1063,9 +1067,10 @@ def main(argv=None):
 
     # convert RGB to display output
 
-    # convert linear signal to linear light
-    RGB_buffer = colour.oetf_inverse(RGB_buffer, function=args.opto_electronic)
-    RGB_uncorrected = colour.oetf_inverse(RGB_uncorrected, function=args.opto_electronic)
+    # convert linear signal to linear light, if permitted
+    if (not args.electro_optic_disable):
+        RGB_buffer = colour.oetf_inverse(RGB_buffer, function=args.opto_electronic)
+        RGB_uncorrected = colour.oetf_inverse(RGB_uncorrected, function=args.opto_electronic)
 
     # transform color primaries
     if (args.inverse_chromatic_transform):
@@ -1082,7 +1087,7 @@ def main(argv=None):
             chromatic_adaptation_transform=args.chromatic_adaptation_transform)
 
     # convert linear light to linear signal, if permitted
-    if (not args.linear_light):
+    if (not args.opto_electronic_disable):
         RGB_buffer = colour.oetf(RGB_buffer, function=args.opto_electronic)
         RGB_uncorrected = colour.oetf(RGB_uncorrected, function=args.opto_electronic)
 

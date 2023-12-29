@@ -39,7 +39,8 @@ usage: palgen-persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                          [-ela EMPHASIS_LUMA_ATTENUATION]
                          [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
                          [-cat CHROMATIC_ADAPTATION_TRANSFORM] [-ict]
-                         [-oetf OPTO_ELECTRONIC] [--linear-light]
+                         [-oetf OPTO_ELECTRONIC] [--opto-electronic-disable]
+                         [--electro-optic-disable]
                          [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
                          [-rpg REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G]
                          [-rpb REFERENCE_PRIMARIES_B REFERENCE_PRIMARIES_B]
@@ -110,7 +111,10 @@ options:
   -oetf OPTO_ELECTRONIC, --opto-electronic OPTO_ELECTRONIC
                         applies "colour.models" opto-electronic transfer
                         function to the palette, default = "ITU-R BT.709"
-  --linear-light        skip converting linear light to linear signal
+  --opto-electronic-disable
+                        disable converting linear light to linear signal
+  --electro-optic-disable
+                        disable converting linear signal to linear light
   -rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R, --reference-primaries-r REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R
                         set custom reference color primary R, in CIE xy
                         chromaticity coordinates
@@ -136,7 +140,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.9.1
+version 0.9.2
 ```
 
 ## License
