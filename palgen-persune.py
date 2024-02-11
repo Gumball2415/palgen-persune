@@ -618,6 +618,11 @@ def pixel_codec_composite(RGB_buffer, args=None, signal_black_point=None, signal
                     else 0)
 
                 # decode voltage buffer to YUV
+                # based on SMPTE 170M-2004, page 17, section A.5, equation 10
+                # N = 0.925(Y) + 7.5 + 0.925*(U)*sin(2*π*f_sc*t) + 0.925*(V)*cos(2*π*f_sc*t) 
+                # scaling factor 0.925 is already accounted for during normalization
+                # luma pedestal 7.5 is already accounted for during normalization
+                
                 # we use RGB_buffer[] as a temporary buffer for YUV
 
                 # decode Y
@@ -625,22 +630,22 @@ def pixel_codec_composite(RGB_buffer, args=None, signal_black_point=None, signal
 
                 # decode U
                 for t in range(12):
-                    U_buffer[t] = voltage_buffer[t] * np.sin(
+                    U_buffer[t] = voltage_buffer[t] * 2 * np.sin(
                         2 * np.pi / 12 * (t + colorburst_offset) +
                         np.radians(
                             args.hue + antiemphasis_column_chroma -
                             (args.phase_skew * luma))
-                    ) * 2
+                    )
                 RGB_buffer[emphasis, luma, hue, 1] = np.average(U_buffer) * (args.saturation + 1)
 
                 # decode V
                 for t in range(12):
-                    V_buffer[t] = voltage_buffer[t] * np.cos(
+                    V_buffer[t] = voltage_buffer[t] * 2 * np.cos(
                         2 * np.pi / 12 * (t + colorburst_offset) +
                         np.radians(
                             args.hue + antiemphasis_column_chroma -
                             (args.phase_skew * luma))
-                    ) * 2
+                    )
                 RGB_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
 
                 # decode YUV to RGB
@@ -1112,7 +1117,7 @@ def main(argv=None):
 
     if (args.render_img is not None):
         for emphasis in range(8):
-            palette_plot(RGB_buffer, RGB_uncorrected, emphasis, False, (args.render_img is not None), args, s_colorspace, t_colorspace)
+            palette_plot(RGB_buffer, RGB_uncorrected, emphasis, False, False, (args.render_img is not None), args, s_colorspace, t_colorspace)
             if not (args.emphasis):
                 break
 

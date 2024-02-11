@@ -13,14 +13,9 @@ something to note: there _is_ no one true NES palette, but this generator can pr
 
 See `requirements.txt` for more details.
 
-### **NOTE!**
-
-`colour-science` has **not yet been updated for Python 3.12**.
-In the meantime, use **Python 3.11**.
-
 ### This script requires:
 
-- `colour-science == 0.4.3`
+- `colour-science == 0.4.4`
 	- for linear light, and color adaptation functions. 
 - `matplotlib == 3.8.2`
 	- for graphs and `colour-science` CIE 1931 colorimetry diagrams.
@@ -147,7 +142,7 @@ version 0.9.2
 
 This work is licensed under the MIT-0 license.
 
-Copyright (C) Persune 2023.
+Copyright (C) Persune 2024.
 
 ## Credits
 

@@ -1,2 +1,2 @@
-colour-science == 0.4.3
+colour-science == 0.4.4
 matplotlib == 3.8.2
