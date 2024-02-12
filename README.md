@@ -71,18 +71,17 @@ options:
   -c {darken,desaturate}, --clip {darken,desaturate}
                         clips out-of-gamut RGB colors
   -bri BRIGHTNESS, --brightness BRIGHTNESS
-                        brightness delta, -1.0 to 1.0, default = 0.0
+                        brightness delta in IRE units, -1.0 to 1.0, default =
+                        0.0
   -con CONTRAST, --contrast CONTRAST
-                        contrast delta, 0.0 to 1.0, default = 0.0
+                        contrast delta in IRE units, 0.0 to 1.0, default = 0.0
   -hue HUE, --hue HUE   hue angle delta, in degrees, default = 0.0
   -sat SATURATION, --saturation SATURATION
                         saturation delta, -1.0 to 1.0, default = 0.0
   -blp BLACK_POINT, --black-point BLACK_POINT
-                        black point, in voltage units relative to blanking,
-                        default = (lowest signal level)
+                        black point, in IRE units, default = 0 IRE
   -whp WHITE_POINT, --white-point WHITE_POINT
-                        white point, in voltage units relative to blanking,
-                        default = (highest signal level)
+                        white point, in IRE units, default = level $20
   -phs PHASE_SKEW, --phase-skew PHASE_SKEW
                         differential phase distortion for composite PPUs, in
                         degrees, default = 0.0
@@ -135,7 +134,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.9.2
+version 0.10.0
 ```
 
 ## License

@@ -1,5 +1,5 @@
 # palgen NES
-# Copyright (C) 2023 Persune
+# Copyright (C) 2024 Persune
 # inspired by PalGen, Copyright (C) 2018 DragWx <https://github.com/DragWx>
 # testing out the concepts from https://www.nesdev.org/wiki/NTSC_video#Composite_decoding
 #
@@ -26,7 +26,7 @@ import colour.plotting.diagrams
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
         description="yet another NES palette generator",
-        epilog="version 0.9.2")
+        epilog="version 0.10.0")
     # output options
     parser.add_argument(
         "-d",
@@ -126,13 +126,13 @@ def parse_argv(argv):
         "-bri",
         "--brightness",
         type = np.float64,
-        help = "brightness delta, -1.0 to 1.0, default = 0.0",
+        help = "brightness delta in IRE units, -1.0 to 1.0, default = 0.0",
         default = 0.0)
     parser.add_argument(
         "-con",
         "--contrast",
         type = np.float64,
-        help = "contrast delta, 0.0 to 1.0, default = 0.0",
+        help = "contrast delta in IRE units, 0.0 to 1.0, default = 0.0",
         default = 0.0)
     parser.add_argument(
         "-hue",
@@ -150,12 +150,12 @@ def parse_argv(argv):
         "-blp",
         "--black-point",
         type = np.float64,
-        help = "black point, in voltage units relative to blanking, default = (lowest signal level)")
+        help = "black point, in IRE units, default = 0 IRE")
     parser.add_argument(
         "-whp",
         "--white-point",
         type = np.float64,
-        help = "white point, in voltage units relative to blanking, default = (highest signal level)")
+        help = "white point, in IRE units, default = level $20")
 
     # analog distortion effects options
     parser.add_argument(
@@ -403,38 +403,37 @@ def composite_QAM_plot(voltage_buffer,
     axV = fig.add_subplot(gs[2,0])
     ax1 = fig.add_subplot(gs[:,1], projection='polar')
     fig.suptitle("QAM demodulating ${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
-    w = voltage_buffer
     x = np.arange(0,12)
     Y_avg = np.average(voltage_buffer)
     U_avg = np.average(U_buffer)
     V_avg = np.average(V_buffer)
     
-    range_axis = (signal_white_point / (signal_white_point - signal_black_point)) - signal_black_point
+    range_axis = ((signal_white_point / (signal_white_point - signal_black_point)) - signal_black_point) * 140
     axY.set_title("Y decoding")
-    axY.set_ylabel("value")
-    axY.axis([0, 12, 0, range_axis])
+    axY.set_ylabel("IRE")
+    axY.axis([0, 12, -50, range_axis])
     axY.plot(x, voltage_buffer, 'o-', linewidth=0.7, label='composite signal')
     axY.plot(x, np.full((12), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format(Y_avg))
     axY.legend(loc='lower right')
     
     axU.set_title("U decoding")
-    axU.set_ylabel("value")
-    axU.axis([0, 12, -2*range_axis, 2*range_axis])
+    axU.set_ylabel("IRE")
+    axU.axis([0, 12, -range_axis, range_axis])
     axU.plot(x, U_buffer, 'o-', linewidth=0.7, label='demodulated U signal')
     axU.plot(x, np.full((12), U_avg), 'o-', linewidth=0.7, label='U value = {:< z.3f}'.format(U_avg))
     axU.legend(loc='lower right')
     
     axV.set_title("V decoding")
-    axV.set_ylabel("value")
-    axV.axis([0, 12, -2*range_axis, 2*range_axis])
+    axV.set_ylabel("IRE")
+    axV.axis([0, 12, -range_axis, range_axis])
     axV.plot(x, V_buffer, 'o-', linewidth=0.7, label='demodulated V signal')
     axV.plot(x, np.full((12), V_avg), 'o-', linewidth=0.7, label='V value = {:< z.3f}'.format(V_avg))
     axV.legend(loc='lower right')
     
     color_theta = np.arctan2(V_avg, U_avg)
     color_r =  np.sqrt(U_avg**2 + V_avg**2)
-    ax1.axis([0, 2*np.pi, 0, 0.6])
-    ax1.set_title("Phasor plot")
+    ax1.axis([0, 2*np.pi, 0, 60])
+    ax1.set_title("UV Phasor plot")
     ax1.scatter(color_theta, color_r)
     ax1.vlines(color_theta, 0, color_r)
     
@@ -453,9 +452,9 @@ def composite_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counte
     ax = fig.subplots()
     x = np.arange(0,12)
     y = voltage_buffer
-    ax.axis([0, 12, 0, 1.5])
+    ax.axis([0, 12, -50, 140])
     ax.set_xlabel("Sample count")
-    ax.set_ylabel("Voltage")
+    ax.set_ylabel("IRE")
     ax.plot(x, y, 'o-', linewidth=0.7)
     
     fig.set_size_inches(16, 9)
@@ -507,10 +506,12 @@ def color_clip_desaturate(RGB_buffer):
     return RGB_buffer
 
 # B-Y and R-Y reduction factors
+# S170m-2004.pdf: Composite Analog Video Signal NTSC for Studio Applications. Page 16.
 BY_rf = 0.492111
 RY_rf = 0.877283
 
 # derived from the NTSC base matrix of luminance and color-difference
+# S170m-2004.pdf: Composite Analog Video Signal NTSC for Studio Applications. Page 4.
 RGB_to_YUV = np.array([
     [ 0.299,        0.587,        0.114],
     [-0.299*BY_rf, -0.587*BY_rf,  0.886*BY_rf],
@@ -544,9 +545,10 @@ def pixel_codec_composite(RGB_buffer, args=None, signal_black_point=None, signal
     # used for image sequence plotting
     sequence_counter = 0
 
-    colorburst_phase = 8
     if (args.ppu == "2C07"):
-        colorburst_phase += 0.5
+        colorburst_phase = 8.5
+    else:
+        colorburst_phase = 8
     # due to the way the waveform is encoded, the hue is off by 1/2 of a sample
     colorburst_offset = colorburst_phase - 6 - 0.5
 
@@ -624,28 +626,34 @@ def pixel_codec_composite(RGB_buffer, args=None, signal_black_point=None, signal
                 # luma pedestal 7.5 is already accounted for during normalization
                 
                 # we use RGB_buffer[] as a temporary buffer for YUV
+                
+                # shift blanking to 0
+                voltage_buffer -= signal_table_composite[1, 1, 0]
+                
+                # convert to IRE
+                voltage_buffer *= 140
 
                 # decode Y
-                RGB_buffer[emphasis, luma, hue, 0] = np.average(voltage_buffer) + emphasis_row_luma
+                RGB_buffer[emphasis, luma, hue, 0] = (np.average(voltage_buffer) + emphasis_row_luma) / 0.925
 
                 # decode U
                 for t in range(12):
-                    U_buffer[t] = voltage_buffer[t] * 2 * np.sin(
+                    U_buffer[t] = (voltage_buffer[t] - np.average(voltage_buffer) ) * 2 * np.sin(
                         2 * np.pi / 12 * (t + colorburst_offset) +
                         np.radians(
                             args.hue + antiemphasis_column_chroma -
                             (args.phase_skew * luma))
-                    )
+                    ) / 0.925
                 RGB_buffer[emphasis, luma, hue, 1] = np.average(U_buffer) * (args.saturation + 1)
 
                 # decode V
                 for t in range(12):
-                    V_buffer[t] = voltage_buffer[t] * 2 * np.cos(
+                    V_buffer[t] = (voltage_buffer[t] - np.average(voltage_buffer)) * 2 * np.cos(
                         2 * np.pi / 12 * (t + colorburst_offset) +
                         np.radians(
                             args.hue + antiemphasis_column_chroma -
                             (args.phase_skew * luma))
-                    )
+                    ) / 0.925
                 RGB_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
 
                 # decode YUV to RGB
@@ -674,7 +682,7 @@ def rgb_oct_triplet_to_float_array(signal_triplet, emphasis):
     blue = ((signal_triplet & 0x00F)) if not (emphasis & 0b100) else 7
     return np.array([red, green, blue], np.float64)
 
-def pixel_codec_rgb(RGB_buffer, args=None):
+def pixel_codec_rgb(RGB_buffer, args=None, signal_black_point=None, signal_white_point=None):
     signal_table_rgb = np.empty([0x40], np.uint16)
     match args.ppu:
         case "2C04-0000"|"2C04-0001"|"2C04-0002"|"2C04-0003"|"2C04-0004":
@@ -741,11 +749,16 @@ def pixel_codec_rgb(RGB_buffer, args=None):
         for luma in range(4):
             for hue in range(16):
                 color_byte = (luma << 4) | hue
-                # decode voltage buffer to RGB
+
+                # decode palette LUT to RGB
                 RGB_buffer[emphasis, luma, hue] = rgb_oct_triplet_to_float_array(signal_table_rgb[scramble[color_byte]], emphasis) / 7
 
-                # encode RGB to YIQ?
+                # convert to IRE scale so that i don't have to complicate black/white points
+                RGB_buffer[emphasis, luma, hue] *= 100
+
+                # encode RGB to YIQ for hue and saturation adjustment
                 RGB_buffer[emphasis, luma, hue] = np.matmul(RGB_to_YIQ, RGB_buffer[emphasis, luma, hue])
+
                 # Titler functionality
                 if (args.ppu == "2C05-99"):
                     # reduce Q component by half
@@ -1020,7 +1033,7 @@ def main(argv=None):
     # has to be zero'd out for the normalize function to work
     RGB_buffer = np.zeros([8,4,16,3], np.float64)
     signal_black_point = 0
-    signal_white_point = 1
+    signal_white_point = 100
 
     # generate color!
     match args.ppu:
@@ -1028,25 +1041,19 @@ def main(argv=None):
             # signal buffer normalization
             if (args.black_point is not None):
                 signal_black_point = args.black_point
-            else:
-                signal_black_point = 0
 
             if (args.white_point is not None):
-                signal_white_point = 1 + args.white_point
-            else:
-                signal_white_point = 1
-            RGB_buffer = pixel_codec_rgb(RGB_buffer, args)
+                signal_white_point = args.white_point
+            RGB_buffer = pixel_codec_rgb(RGB_buffer, args, signal_black_point, signal_white_point)
         case "2C02"|"2C07":
             # signal buffer normalization
             if (args.black_point is not None):
-                signal_black_point = signal_table_composite[1, 1, 0] + args.black_point
-            else:
-                signal_black_point = signal_table_composite[1, 1, 0]
+                signal_black_point = args.black_point
 
             if (args.white_point is not None):
-                signal_white_point = signal_table_composite[1, 1, 0] + args.white_point
+                signal_white_point = args.white_point
             else:
-                signal_white_point = signal_table_composite[3, 0, 0]
+                signal_white_point = 140 * (signal_table_composite[3, 0, 0] - signal_table_composite[1, 1, 0])
             RGB_buffer = pixel_codec_composite(RGB_buffer, args, signal_black_point, signal_white_point)
 
     # reshape buffer after encoding
@@ -1056,6 +1063,7 @@ def main(argv=None):
         RGB_buffer = np.reshape(RGB_buffer,(4, 16, 3))
 
     # apply black and white points, brightness, and contrast
+    # this also scales the values back roughly within range of 0 to 1
     RGB_buffer -= signal_black_point
     RGB_buffer /= (signal_white_point - signal_black_point)
     RGB_buffer += args.brightness
