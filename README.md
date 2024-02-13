@@ -29,7 +29,7 @@ usage: palgen-persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                          [-ppu {2C02,2C03,2C04-0000,2C04-0001,2C04-0002,2C04-0003,2C04-0004,2C05-99,2C07}]
                          [-c {darken,desaturate}] [-bri BRIGHTNESS]
                          [-con CONTRAST] [-hue HUE] [-sat SATURATION]
-                         [-blp BLACK_POINT] [-whp WHITE_POINT]
+                         [-blp BLACK_POINT] [-whp WHITE_POINT] [-gai GAIN]
                          [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
                          [-ela EMPHASIS_LUMA_ATTENUATION]
                          [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
@@ -71,17 +71,19 @@ options:
   -c {darken,desaturate}, --clip {darken,desaturate}
                         clips out-of-gamut RGB colors
   -bri BRIGHTNESS, --brightness BRIGHTNESS
-                        brightness delta in IRE units, -1.0 to 1.0, default =
-                        0.0
+                        luma brightness delta in IRE units, default = 0.0
   -con CONTRAST, --contrast CONTRAST
-                        contrast delta in IRE units, 0.0 to 1.0, default = 0.0
-  -hue HUE, --hue HUE   hue angle delta, in degrees, default = 0.0
+                        luma contrast factor, default = 1.0
+  -hue HUE, --hue HUE   chroma hue angle delta, in degrees, default = 0.0
   -sat SATURATION, --saturation SATURATION
-                        saturation delta, -1.0 to 1.0, default = 0.0
+                        chroma saturation factor, default = 1.0
   -blp BLACK_POINT, --black-point BLACK_POINT
                         black point, in IRE units, default = 0 IRE
   -whp WHITE_POINT, --white-point WHITE_POINT
                         white point, in IRE units, default = level $20
+  -gai GAIN, --gain GAIN
+                        gain adjustment to signal before decoding, in IRE
+                        units, default = 0.0
   -phs PHASE_SKEW, --phase-skew PHASE_SKEW
                         differential phase distortion for composite PPUs, in
                         degrees, default = 0.0
@@ -134,7 +136,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.10.0
+version 0.11.0
 ```
 
 ## License

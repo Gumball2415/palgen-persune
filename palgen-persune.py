@@ -26,7 +26,7 @@ import colour.plotting.diagrams
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
         description="yet another NES palette generator",
-        epilog="version 0.10.0")
+        epilog="version 0.11.0")
     # output options
     parser.add_argument(
         "-d",
@@ -126,26 +126,26 @@ def parse_argv(argv):
         "-bri",
         "--brightness",
         type = np.float64,
-        help = "brightness delta in IRE units, -1.0 to 1.0, default = 0.0",
+        help = "luma brightness delta in IRE units, default = 0.0",
         default = 0.0)
     parser.add_argument(
         "-con",
         "--contrast",
         type = np.float64,
-        help = "contrast delta in IRE units, 0.0 to 1.0, default = 0.0",
-        default = 0.0)
+        help = "luma contrast factor, default = 1.0",
+        default = 1.0)
     parser.add_argument(
         "-hue",
         "--hue",
         type = np.float64,
-        help = "hue angle delta, in degrees, default = 0.0",
+        help = "chroma hue angle delta, in degrees, default = 0.0",
         default = 0)
     parser.add_argument(
         "-sat",
         "--saturation",
         type = np.float64,
-        help ="saturation delta, -1.0 to 1.0, default = 0.0",
-        default = 0)
+        help ="chroma saturation factor, default = 1.0",
+        default = 1)
     parser.add_argument(
         "-blp",
         "--black-point",
@@ -156,6 +156,12 @@ def parse_argv(argv):
         "--white-point",
         type = np.float64,
         help = "white point, in IRE units, default = level $20")
+    parser.add_argument(
+        "-gai",
+        "--gain",
+        type = np.float64,
+        help = "gain adjustment to signal before decoding, in IRE units, default = 0.0",
+        default = 0.0)
 
     # analog distortion effects options
     parser.add_argument(
@@ -541,7 +547,7 @@ signal_table_composite = np.array([
     ]
 ], np.float64)
 
-def pixel_codec_composite(RGB_buffer, args=None, signal_black_point=None, signal_white_point=None):
+def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal_white_point=None):
     # used for image sequence plotting
     sequence_counter = 0
 
@@ -625,39 +631,41 @@ def pixel_codec_composite(RGB_buffer, args=None, signal_black_point=None, signal
                 # scaling factor 0.925 is already accounted for during normalization
                 # luma pedestal 7.5 is already accounted for during normalization
                 
-                # we use RGB_buffer[] as a temporary buffer for YUV
-                
                 # shift blanking to 0
                 voltage_buffer -= signal_table_composite[1, 1, 0]
                 
                 # convert to IRE
                 voltage_buffer *= 140
 
+                # apply gain
+                voltage_buffer += args.gain
+
                 # decode Y
-                RGB_buffer[emphasis, luma, hue, 0] = (np.average(voltage_buffer) + emphasis_row_luma) / 0.925
+
+                # apply brightness and contrast
+                YUV_buffer[emphasis, luma, hue, 0] = (((np.average(voltage_buffer) + emphasis_row_luma) / 0.925) + args.brightness) * args.contrast
 
                 # decode U
+                # also apply hue and saturation
                 for t in range(12):
                     U_buffer[t] = (voltage_buffer[t] - np.average(voltage_buffer) ) * 2 * np.sin(
                         2 * np.pi / 12 * (t + colorburst_offset) +
                         np.radians(
                             args.hue + antiemphasis_column_chroma -
                             (args.phase_skew * luma))
-                    ) / 0.925
-                RGB_buffer[emphasis, luma, hue, 1] = np.average(U_buffer) * (args.saturation + 1)
+                    ) / 0.925 * args.saturation
+                YUV_buffer[emphasis, luma, hue, 1] = np.average(U_buffer)
 
                 # decode V
+                # also apply hue and saturation
                 for t in range(12):
                     V_buffer[t] = (voltage_buffer[t] - np.average(voltage_buffer)) * 2 * np.cos(
                         2 * np.pi / 12 * (t + colorburst_offset) +
                         np.radians(
                             args.hue + antiemphasis_column_chroma -
                             (args.phase_skew * luma))
-                    ) / 0.925
-                RGB_buffer[emphasis, luma, hue, 2] = np.average(V_buffer) * (args.saturation + 1)
-
-                # decode YUV to RGB
-                RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YUV), RGB_buffer[emphasis, luma, hue])
+                    ) / 0.925 * args.saturation
+                YUV_buffer[emphasis, luma, hue, 2] = np.average(V_buffer)
 
                 # visualize chroma decoding
                 if (args.debug):
@@ -671,10 +679,10 @@ def pixel_codec_composite(RGB_buffer, args=None, signal_black_point=None, signal
 
         if not (args.emphasis):
             # clip unused emphasis space
-            RGB_buffer = np.split(RGB_buffer, 8, 0)[0]
+            YUV_buffer = np.split(YUV_buffer, 8, 0)[0]
             break
 
-    return RGB_buffer
+    return YUV_buffer
 
 def rgb_oct_triplet_to_float_array(signal_triplet, emphasis):
     red = ((signal_triplet & 0xF00) >> 8) if not (emphasis & 0b001) else 7
@@ -682,7 +690,7 @@ def rgb_oct_triplet_to_float_array(signal_triplet, emphasis):
     blue = ((signal_triplet & 0x00F)) if not (emphasis & 0b100) else 7
     return np.array([red, green, blue], np.float64)
 
-def pixel_codec_rgb(RGB_buffer, args=None, signal_black_point=None, signal_white_point=None):
+def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white_point=None):
     signal_table_rgb = np.empty([0x40], np.uint16)
     match args.ppu:
         case "2C04-0000"|"2C04-0001"|"2C04-0002"|"2C04-0003"|"2C04-0004":
@@ -709,6 +717,11 @@ def pixel_codec_rgb(RGB_buffer, args=None, signal_black_point=None, signal_white
         RGB_to_YUV[0,:],
         ((RGB_to_YUV[1,:] * np.cos(IQ_tilt)) - (RGB_to_YUV[2,:]*np.sin(IQ_tilt))),
         ((RGB_to_YUV[1,:] * np.sin(IQ_tilt)) + (RGB_to_YUV[2,:]*np.cos(IQ_tilt)))
+    ], np.float64)
+    YUV_to_YIQ = np.array([
+        [1, 0, 0],
+        [0, np.cos(IQ_tilt), np.sin(IQ_tilt)],
+        [0, -np.sin(IQ_tilt), np.cos(IQ_tilt)]
     ], np.float64)
 
     # 2C04 LUTs
@@ -751,42 +764,49 @@ def pixel_codec_rgb(RGB_buffer, args=None, signal_black_point=None, signal_white
                 color_byte = (luma << 4) | hue
 
                 # decode palette LUT to RGB
-                RGB_buffer[emphasis, luma, hue] = rgb_oct_triplet_to_float_array(signal_table_rgb[scramble[color_byte]], emphasis) / 7
+                YUV_buffer[emphasis, luma, hue] = rgb_oct_triplet_to_float_array(signal_table_rgb[scramble[color_byte]], emphasis) / 7
 
                 # convert to IRE scale so that i don't have to complicate black/white points
-                RGB_buffer[emphasis, luma, hue] *= 100
+                YUV_buffer[emphasis, luma, hue] *= 100
+
+                # apply gain
+                YUV_buffer[emphasis, luma, hue] += args.gain
 
                 # encode RGB to YIQ for hue and saturation adjustment
-                RGB_buffer[emphasis, luma, hue] = np.matmul(RGB_to_YIQ, RGB_buffer[emphasis, luma, hue])
+                YUV_buffer[emphasis, luma, hue] = np.matmul(RGB_to_YIQ, YUV_buffer[emphasis, luma, hue])
 
                 # Titler functionality
                 if (args.ppu == "2C05-99"):
                     # reduce Q component by half
-                    RGB_buffer[emphasis, luma, hue, 2] *= 0.5
+                    YUV_buffer[emphasis, luma, hue, 2] *= 0.5
 
-                # apply saturation
-                RGB_buffer[emphasis, luma, hue, 1] *= (args.saturation + 1)
-                RGB_buffer[emphasis, luma, hue, 2] *= (args.saturation + 1)
+                # apply brightness and contrast
+                YUV_buffer[emphasis, luma, hue, 0] += args.brightness
+                YUV_buffer[emphasis, luma, hue, 0] *= args.contrast
                 
                 # apply hue
-                RGB_buffer[emphasis, luma, hue, 1] = (
-                    (RGB_buffer[emphasis, luma, hue, 1] * np.cos(np.radians(args.hue))) -
-                    (RGB_buffer[emphasis, luma, hue, 2] * np.sin(np.radians(args.hue)))
+                YUV_buffer[emphasis, luma, hue, 1] = (
+                    (YUV_buffer[emphasis, luma, hue, 1] * np.cos(np.radians(args.hue))) -
+                    (YUV_buffer[emphasis, luma, hue, 2] * np.sin(np.radians(args.hue)))
                 )
-                RGB_buffer[emphasis, luma, hue, 2] = (
-                    (RGB_buffer[emphasis, luma, hue, 1] * np.sin(np.radians(args.hue))) +
-                    (RGB_buffer[emphasis, luma, hue, 2] * np.cos(np.radians(args.hue)))
+                YUV_buffer[emphasis, luma, hue, 2] = (
+                    (YUV_buffer[emphasis, luma, hue, 1] * np.sin(np.radians(args.hue))) +
+                    (YUV_buffer[emphasis, luma, hue, 2] * np.cos(np.radians(args.hue)))
                 )
+
+                # apply saturation
+                YUV_buffer[emphasis, luma, hue, 1] *= args.saturation
+                YUV_buffer[emphasis, luma, hue, 2] *= args.saturation
                 
-                # decode back to RGB
-                RGB_buffer[emphasis, luma, hue] = np.matmul(np.linalg.inv(RGB_to_YIQ), RGB_buffer[emphasis, luma, hue])
+                # convert to YUV for later decoding
+                YUV_buffer[emphasis, luma, hue] = np.matmul(YUV_to_YIQ, YUV_buffer[emphasis, luma, hue])
 
         if not (args.emphasis):
             # clip unused emphasis space
-            RGB_buffer = np.split(RGB_buffer, 8, 0)[0]
+            YUV_buffer = np.split(YUV_buffer, 8, 0)[0]
             break
 
-    return RGB_buffer
+    return YUV_buffer
 
 def output_binary_uint8(RGB_buffer, args=None):
     with open((os.path.splitext(args.output)[0] + ".pal"), mode="wb") as Palette_file:
@@ -1044,6 +1064,8 @@ def main(argv=None):
 
             if (args.white_point is not None):
                 signal_white_point = args.white_point
+                
+            # we use RGB_buffer[] as a temporary buffer for YUV
             RGB_buffer = pixel_codec_rgb(RGB_buffer, args, signal_black_point, signal_white_point)
         case "2C02"|"2C07":
             # signal buffer normalization
@@ -1054,6 +1076,7 @@ def main(argv=None):
                 signal_white_point = args.white_point
             else:
                 signal_white_point = 140 * (signal_table_composite[3, 0, 0] - signal_table_composite[1, 1, 0])
+            # we use RGB_buffer[] as a temporary buffer for YUV
             RGB_buffer = pixel_codec_composite(RGB_buffer, args, signal_black_point, signal_white_point)
 
     # reshape buffer after encoding
@@ -1062,12 +1085,13 @@ def main(argv=None):
     else:
         RGB_buffer = np.reshape(RGB_buffer,(4, 16, 3))
 
-    # apply black and white points, brightness, and contrast
+    # convert back to RGB
+    RGB_buffer = np.einsum('ij,klj->kli', np.linalg.inv(RGB_to_YUV), RGB_buffer, dtype=np.float64)
+
+    # apply black and white points
     # this also scales the values back roughly within range of 0 to 1
     RGB_buffer -= signal_black_point
     RGB_buffer /= (signal_white_point - signal_black_point)
-    RGB_buffer += args.brightness
-    RGB_buffer *= (args.contrast + 1)
 
     # debug: a rough vectorscope plot
     # NES_SMPTE_plot(RGB_buffer, 0, args, plt)
