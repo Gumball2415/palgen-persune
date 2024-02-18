@@ -26,7 +26,7 @@ import colour.plotting.diagrams
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
         description="yet another NES palette generator",
-        epilog="version 0.11.0")
+        epilog="version 0.12.0")
     # output options
     parser.add_argument(
         "-d",
@@ -390,6 +390,7 @@ def palette_plot(RGB_buffer,
 def composite_QAM_plot(voltage_buffer,
     U_buffer,
     V_buffer,
+    buffer_size,
     emphasis,
     luma,
     hue,
@@ -409,7 +410,7 @@ def composite_QAM_plot(voltage_buffer,
     axV = fig.add_subplot(gs[2,0])
     ax1 = fig.add_subplot(gs[:,1], projection='polar')
     fig.suptitle("QAM demodulating ${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
-    x = np.arange(0,12)
+    x = np.arange(0,buffer_size)
     Y_avg = np.average(voltage_buffer)
     U_avg = np.average(U_buffer)
     V_avg = np.average(V_buffer)
@@ -417,23 +418,23 @@ def composite_QAM_plot(voltage_buffer,
     range_axis = ((signal_white_point / (signal_white_point - signal_black_point)) - signal_black_point) * 140
     axY.set_title("Y decoding")
     axY.set_ylabel("IRE")
-    axY.axis([0, 12, -50, range_axis])
+    axY.axis([0, buffer_size, -50, range_axis])
     axY.plot(x, voltage_buffer, 'o-', linewidth=0.7, label='composite signal')
-    axY.plot(x, np.full((12), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format(Y_avg))
+    axY.plot(x, np.full((buffer_size), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format(Y_avg))
     axY.legend(loc='lower right')
     
     axU.set_title("U decoding")
     axU.set_ylabel("IRE")
-    axU.axis([0, 12, -range_axis, range_axis])
+    axU.axis([0, buffer_size, -range_axis, range_axis])
     axU.plot(x, U_buffer, 'o-', linewidth=0.7, label='demodulated U signal')
-    axU.plot(x, np.full((12), U_avg), 'o-', linewidth=0.7, label='U value = {:< z.3f}'.format(U_avg))
+    axU.plot(x, np.full((buffer_size), U_avg), 'o-', linewidth=0.7, label='U value = {:< z.3f}'.format(U_avg))
     axU.legend(loc='lower right')
     
     axV.set_title("V decoding")
     axV.set_ylabel("IRE")
-    axV.axis([0, 12, -range_axis, range_axis])
+    axV.axis([0, buffer_size, -range_axis, range_axis])
     axV.plot(x, V_buffer, 'o-', linewidth=0.7, label='demodulated V signal')
-    axV.plot(x, np.full((12), V_avg), 'o-', linewidth=0.7, label='V value = {:< z.3f}'.format(V_avg))
+    axV.plot(x, np.full((buffer_size), V_avg), 'o-', linewidth=0.7, label='V value = {:< z.3f}'.format(V_avg))
     axV.legend(loc='lower right')
     
     color_theta = np.arctan2(V_avg, U_avg)
@@ -643,7 +644,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 # decode Y
 
                 # apply brightness and contrast
-                YUV_buffer[emphasis, luma, hue, 0] = (((np.average(voltage_buffer) + emphasis_row_luma) / 0.925) + args.brightness) * args.contrast
+                YUV_buffer[emphasis, luma, hue, 0] = (np.average(voltage_buffer) + emphasis_row_luma + args.brightness) * args.contrast
 
                 # decode U
                 # also apply hue and saturation
@@ -653,7 +654,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                         np.radians(
                             args.hue + antiemphasis_column_chroma -
                             (args.phase_skew * luma))
-                    ) / 0.925 * args.saturation
+                    ) * args.saturation
                 YUV_buffer[emphasis, luma, hue, 1] = np.average(U_buffer)
 
                 # decode V
@@ -664,7 +665,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                         np.radians(
                             args.hue + antiemphasis_column_chroma -
                             (args.phase_skew * luma))
-                    ) / 0.925 * args.saturation
+                    ) * args.saturation
                 YUV_buffer[emphasis, luma, hue, 2] = np.average(V_buffer)
 
                 # visualize chroma decoding
@@ -673,7 +674,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 if (args.waveforms):
                     composite_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counter, args)
                 if (args.phase_QAM):
-                    composite_QAM_plot(voltage_buffer, U_buffer, V_buffer, emphasis, luma, hue, sequence_counter, args, signal_black_point, signal_white_point)
+                    composite_QAM_plot(voltage_buffer, U_buffer, V_buffer, buffer_size, emphasis, luma, hue, sequence_counter, args, signal_black_point, signal_white_point)
 
                 sequence_counter += 1
 
