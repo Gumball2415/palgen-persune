@@ -26,7 +26,7 @@ import colour.plotting.diagrams
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
         description="yet another NES palette generator",
-        epilog="version 0.12.0")
+        epilog="version 0.12.1")
     # output options
     parser.add_argument(
         "-d",
@@ -1161,4 +1161,4 @@ def main(argv=None):
         palette_plot(RGB_buffer, RGB_uncorrected, 0, True, False, (args.render_img is not None), args, s_colorspace, t_colorspace)
 
 if __name__=='__main__':
-    main()
+    main(sys.argv)

@@ -22,7 +22,7 @@ See `requirements.txt` for more details.
 
 ## Usage
 ```
-usage: palgen-persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
+usage: palgen_persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                          [-f {.pal uint8,.pal double,.pal Jasc,.gpl,.png,.txt HTML hex,.txt MediaWiki,.h uint8_t}]
                          [-e] [-t TEST_IMAGE] [-r RENDER_IMG] [-w] [-p]
                          [-n {scale,scale clip negative}]
@@ -136,7 +136,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.12.0
+version 0.12.1
 ```
 
 ## License
