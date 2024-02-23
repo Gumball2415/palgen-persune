@@ -23,10 +23,12 @@ import numpy as np
 import colour.models
 import colour.plotting.diagrams
 
+VERSION = "0.12.1"
+
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
         description="yet another NES palette generator",
-        epilog="version 0.12.1")
+        epilog="version " + VERSION)
     # output options
     parser.add_argument(
         "-d",
