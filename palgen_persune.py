@@ -123,7 +123,7 @@ def parse_argv(argv):
             "desaturate"
         ])
 
-    # color adjustment options
+    # color decoding options
     parser.add_argument(
         "-bri",
         "--brightness",
@@ -165,7 +165,7 @@ def parse_argv(argv):
         help = "gain adjustment to signal before decoding, in IRE units, default = 0.0",
         default = 0.0)
 
-    # analog distortion effects options
+    # analog effects options
     parser.add_argument(
         "-phs",
         "--phase-skew",
