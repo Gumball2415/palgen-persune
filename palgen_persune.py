@@ -23,7 +23,7 @@ import numpy as np
 import colour.models
 import colour.plotting.diagrams
 
-VERSION = "0.12.1"
+VERSION = "0.12.2"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -213,7 +213,13 @@ def parse_argv(argv):
         "-oetf",
         "--opto-electronic",
         type=str,
-        help="applies \"colour.models\" opto-electronic transfer function to the palette, default = \"ITU-R BT.709\"",
+        help="applies \"colour.models\" color component transform function to use as opto-electronic transform function, default = \"ITU-R BT.709\"",
+        default = "ITU-R BT.709")
+    parser.add_argument(
+        "-eotf",
+        "--electro-optic",
+        type=str,
+        help="applies \"colour.models\" color component transform function to use as electro-optic transform function, default = \"ITU-R BT.709\"",
         default = "ITU-R BT.709")
     parser.add_argument(
         "--opto-electronic-disable",
@@ -479,9 +485,9 @@ def normalize_RGB(RGB_buffer, args=None):
     if (args.clip is not None):
         match args.clip:
             case "darken":
-                RGB_buffer = color_clip_darken(RGB_buffer)
+                color_clip_darken(RGB_buffer)
             case "desaturate":
-                RGB_buffer = color_clip_desaturate(RGB_buffer)
+                color_clip_desaturate(RGB_buffer)
     elif (args.normalize is not None):
         if (args.normalize != "scale clip negative"):
             RGB_buffer -= np.amin(RGB_buffer)
@@ -499,7 +505,6 @@ def color_clip_darken(RGB_buffer):
                 # algorithm by DragWx
                 darken_factor = np.max(RGB_buffer[luma, chroma])
                 RGB_buffer[luma, chroma] /= darken_factor
-    return RGB_buffer
 
 def color_clip_desaturate(RGB_buffer):
     for luma in range(RGB_buffer.shape[0]):
@@ -513,7 +518,6 @@ def color_clip_desaturate(RGB_buffer):
                 RGB_buffer[luma, chroma] -= YUV_calc[0]
                 RGB_buffer[luma, chroma] /= darken_factor
                 RGB_buffer[luma, chroma] += YUV_calc[0]
-    return RGB_buffer
 
 # B-Y and R-Y reduction factors
 # S170m-2004.pdf: Composite Analog Video Signal NTSC for Studio Applications. Page 16.
@@ -1052,9 +1056,6 @@ def main(argv=None):
             t_colorspace.whitepoint_name = colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint_name
             t_colorspace.whitepoint = colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint
 
-        s_colorspace.name = "Reference colorspace: {}".format(s_colorspace.name)
-        t_colorspace.name = "Display colorspace: {}".format(t_colorspace.name)
-
         # decoded RGB buffer
         # has to be zero'd out for the normalize function to work
         RGB_buffer = np.zeros([8,4,16,3], np.float64)
@@ -1110,30 +1111,32 @@ def main(argv=None):
         RGB_uncorrected = RGB_buffer
 
         # convert RGB to display output
+        if ((args.electro_optic != args.opto_electronic) or (t_colorspace != s_colorspace)
+            or (args.electro_optic_disable) or (args.opto_electronic_disable)):
+            # convert linear signal to linear light, if permitted
+            if (not args.electro_optic_disable):
+                RGB_buffer = colour.cctf_decoding(RGB_buffer, function=args.electro_optic)
+                RGB_uncorrected = colour.cctf_decoding(RGB_uncorrected, function=args.electro_optic)
 
-        # convert linear signal to linear light, if permitted
-        if (not args.electro_optic_disable):
-            RGB_buffer = colour.oetf_inverse(RGB_buffer, function=args.opto_electronic)
-            RGB_uncorrected = colour.oetf_inverse(RGB_uncorrected, function=args.opto_electronic)
+            # transform color primaries
+            if (t_colorspace != s_colorspace):
+                if (args.inverse_chromatic_transform):
+                    RGB_buffer = colour.RGB_to_RGB(
+                        RGB_buffer,
+                        t_colorspace,
+                        s_colorspace,
+                        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
+                else:
+                    RGB_buffer = colour.RGB_to_RGB(
+                        RGB_buffer,
+                        s_colorspace,
+                        t_colorspace,
+                        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
 
-        # transform color primaries
-        if (args.inverse_chromatic_transform):
-            RGB_buffer = colour.RGB_to_RGB(
-                RGB_buffer,
-                t_colorspace,
-                s_colorspace,
-                chromatic_adaptation_transform=args.chromatic_adaptation_transform)
-        else:
-            RGB_buffer = colour.RGB_to_RGB(
-                RGB_buffer,
-                s_colorspace,
-                t_colorspace,
-                chromatic_adaptation_transform=args.chromatic_adaptation_transform)
-
-        # convert linear light to linear signal, if permitted
-        if (not args.opto_electronic_disable):
-            RGB_buffer = colour.oetf(RGB_buffer, function=args.opto_electronic)
-            RGB_uncorrected = colour.oetf(RGB_uncorrected, function=args.opto_electronic)
+            # convert linear light to linear signal, if permitted
+            if (not args.opto_electronic_disable):
+                RGB_buffer = colour.cctf_encoding(RGB_buffer, function=args.opto_electronic)
+                RGB_uncorrected = colour.cctf_encoding(RGB_uncorrected, function=args.opto_electronic)
 
         # clip again, the transform may produce values beyond 0-1
         normalize_RGB(RGB_buffer, args)
@@ -1152,7 +1155,9 @@ def main(argv=None):
         }
         if (args.output is not None):
             output_format[args.file_format](RGB_buffer, args)
-      
+
+        s_colorspace.name = "Reference colorspace: {}".format(s_colorspace.name)
+        t_colorspace.name = "Display colorspace: {}".format(t_colorspace.name)
 
         if (args.render_img is not None):
             for emphasis in range(8):

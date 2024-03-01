@@ -34,8 +34,8 @@ usage: palgen_persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                          [-ela EMPHASIS_LUMA_ATTENUATION]
                          [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
                          [-cat CHROMATIC_ADAPTATION_TRANSFORM] [-ict]
-                         [-oetf OPTO_ELECTRONIC] [--opto-electronic-disable]
-                         [--electro-optic-disable]
+                         [-oetf OPTO_ELECTRONIC] [-eotf ELECTRO_OPTIC]
+                         [--opto-electronic-disable] [--electro-optic-disable]
                          [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
                          [-rpg REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G]
                          [-rpb REFERENCE_PRIMARIES_B REFERENCE_PRIMARIES_B]
@@ -105,8 +105,13 @@ options:
                         invert direction of chromatic adaptation transform
                         method (from display to reference)
   -oetf OPTO_ELECTRONIC, --opto-electronic OPTO_ELECTRONIC
-                        applies "colour.models" opto-electronic transfer
-                        function to the palette, default = "ITU-R BT.709"
+                        applies "colour.models" color component transform
+                        function to use as opto-electronic transform function,
+                        default = "ITU-R BT.709"
+  -eotf ELECTRO_OPTIC, --electro-optic ELECTRO_OPTIC
+                        applies "colour.models" color component transform
+                        function to use as electro-optic transform function,
+                        default = "ITU-R BT.709"
   --opto-electronic-disable
                         disable converting linear light to linear signal
   --electro-optic-disable
@@ -136,7 +141,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.12.1
+version 0.12.2
 ```
 
 ## License
