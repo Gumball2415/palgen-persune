@@ -23,7 +23,7 @@ import numpy as np
 import colour.models
 import colour.plotting.diagrams
 
-VERSION = "0.12.2"
+VERSION = "0.12.3"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -164,6 +164,10 @@ def parse_argv(argv):
         type = np.float64,
         help = "gain adjustment to signal before decoding, in IRE units, default = 0.0",
         default = 0.0)
+    parser.add_argument(
+        "--pal-comb-filter",
+        action = "store_true",
+        help = "use 1D comb filter decoding on 2C07 phase alternation instead of single-phase decoding")
 
     # analog effects options
     parser.add_argument(
@@ -281,7 +285,7 @@ def parse_argv(argv):
         type = np.float64,
         nargs=2,
         help = "set custom display whitepoint, in CIE xy chromaticity coordinates")
-    
+
     return parser.parse_args(argv[1:])
 
 # figure plotting for palette preview
@@ -307,7 +311,7 @@ def palette_plot(RGB_buffer,
 
     fig = plt.figure(tight_layout=True, dpi=96)
     gs = gridspec.GridSpec(2, 2)
-    
+
     ax0 = fig.add_subplot(gs[1, 1])
     ax1 = fig.add_subplot(gs[0, 1], projection='polar')
     # preview on indexed image (if provided)
@@ -330,7 +334,7 @@ def palette_plot(RGB_buffer,
                 imageout.close()
     else:
         ax2 = fig.add_subplot(gs[:, 0])
-    
+
     if (export_diagrams):
         fig.suptitle('NES palette (emphasis = {0:03b})'.format(emphasis))
     else:
@@ -397,6 +401,10 @@ def palette_plot(RGB_buffer,
     plt.close()
 
 def composite_QAM_plot(voltage_buffer,
+    U_comb,
+    V_comb,
+    U_decode,
+    V_decode,
     U_buffer,
     V_buffer,
     buffer_size,
@@ -420,39 +428,45 @@ def composite_QAM_plot(voltage_buffer,
     ax1 = fig.add_subplot(gs[:,1], projection='polar')
     fig.suptitle("QAM demodulating ${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis))
     x = np.arange(0,buffer_size)
-    Y_avg = np.average(voltage_buffer)
+    Y_avg = np.average(voltage_buffer[0])
     U_avg = np.average(U_buffer)
     V_avg = np.average(V_buffer)
-    
+
     range_axis = ((signal_white_point / (signal_white_point - signal_black_point)) - signal_black_point) * 140
     axY.set_title("Y decoding")
     axY.set_ylabel("IRE")
     axY.axis([0, buffer_size, -50, range_axis])
-    axY.plot(x, voltage_buffer, 'o-', linewidth=0.7, label='composite signal')
+    axY.plot(x, voltage_buffer[0], 'o-', linewidth=0.7, label='composite signal')
+    if (args.pal_comb_filter):
+        axY.plot(x, voltage_buffer[1], 'o-', linewidth=0.7, label='composite signal delay')
     axY.plot(x, np.full((buffer_size), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format(Y_avg))
     axY.legend(loc='lower right')
-    
+
     axU.set_title("U decoding")
     axU.set_ylabel("IRE")
     axU.axis([0, buffer_size, -range_axis, range_axis])
+    axU.plot(x, U_comb, 'o-', linewidth=0.7, label='raw U signal')
+    axU.plot(x, U_decode * 140 / 2, 'o-', linewidth=0.7, label='U subcarrier')
     axU.plot(x, U_buffer, 'o-', linewidth=0.7, label='demodulated U signal')
     axU.plot(x, np.full((buffer_size), U_avg), 'o-', linewidth=0.7, label='U value = {:< z.3f}'.format(U_avg))
     axU.legend(loc='lower right')
-    
+
     axV.set_title("V decoding")
     axV.set_ylabel("IRE")
     axV.axis([0, buffer_size, -range_axis, range_axis])
+    axV.plot(x, V_comb, 'o-', linewidth=0.7, label='raw V signal')
+    axV.plot(x, V_decode * 140 / 2, 'o-', linewidth=0.7, label='V subcarrier')
     axV.plot(x, V_buffer, 'o-', linewidth=0.7, label='demodulated V signal')
     axV.plot(x, np.full((buffer_size), V_avg), 'o-', linewidth=0.7, label='V value = {:< z.3f}'.format(V_avg))
     axV.legend(loc='lower right')
-    
+
     color_theta = np.arctan2(V_avg, U_avg)
     color_r =  np.sqrt(U_avg**2 + V_avg**2)
     ax1.axis([0, 2*np.pi, 0, 60])
     ax1.set_title("UV Phasor plot")
     ax1.scatter(color_theta, color_r)
     ax1.vlines(color_theta, 0, color_r)
-    
+
     fig.set_size_inches(16, 9)
     if (args.render_img is not None):
         plt.savefig("docs/QAM phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=96)
@@ -472,7 +486,7 @@ def composite_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counte
     ax.set_xlabel("Sample count")
     ax.set_ylabel("IRE")
     ax.plot(x, y, 'o-', linewidth=0.7)
-    
+
     fig.set_size_inches(16, 9)
     if (args.render_img is not None):
         plt.savefig("docs/waveform phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=120)
@@ -481,6 +495,30 @@ def composite_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counte
     plt.close()
 
 def normalize_RGB(RGB_buffer, args=None):
+
+    def color_clip_darken(RGB_buffer):
+        for luma in range(RGB_buffer.shape[0]):
+            for chroma in range(RGB_buffer.shape[1]):
+                # if any of the RGB channels are greater than 1
+                if np.any(np.greater(RGB_buffer[luma, chroma], [1.0, 1.0, 1.0])):
+                    # subtract all channels by delta of greatest channel
+                    # algorithm by DragWx
+                    darken_factor = np.max(RGB_buffer[luma, chroma])
+                    RGB_buffer[luma, chroma] /= darken_factor
+
+    def color_clip_desaturate(RGB_buffer):
+        for luma in range(RGB_buffer.shape[0]):
+            for chroma in range(RGB_buffer.shape[1]):
+                # if any of the RGB channels are greater than 1
+                if np.any(np.greater(RGB_buffer[luma, chroma], [1.0, 1.0, 1.0])):
+                    # desaturate that specific color until channels are within range
+                    # algorithm by DragWx
+                    darken_factor = np.max(RGB_buffer[luma, chroma])
+                    YUV_calc = np.matmul(RGB_to_YUV, RGB_buffer[luma, chroma])
+                    RGB_buffer[luma, chroma] -= YUV_calc[0]
+                    RGB_buffer[luma, chroma] /= darken_factor
+                    RGB_buffer[luma, chroma] += YUV_calc[0]
+
     # clip takes priority over normalize
     if (args.clip is not None):
         match args.clip:
@@ -495,29 +533,6 @@ def normalize_RGB(RGB_buffer, args=None):
 
     # clip to 0.0-1.0 to ensure everything is within range
     np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
-
-def color_clip_darken(RGB_buffer):
-    for luma in range(RGB_buffer.shape[0]):
-        for chroma in range(RGB_buffer.shape[1]):
-            # if any of the RGB channels are greater than 1
-            if np.any(np.greater(RGB_buffer[luma, chroma], [1.0, 1.0, 1.0])):
-                # subtract all channels by delta of greatest channel
-                # algorithm by DragWx
-                darken_factor = np.max(RGB_buffer[luma, chroma])
-                RGB_buffer[luma, chroma] /= darken_factor
-
-def color_clip_desaturate(RGB_buffer):
-    for luma in range(RGB_buffer.shape[0]):
-        for chroma in range(RGB_buffer.shape[1]):
-            # if any of the RGB channels are greater than 1
-            if np.any(np.greater(RGB_buffer[luma, chroma], [1.0, 1.0, 1.0])):
-                # desaturate that specific color until channels are within range
-                # algorithm by DragWx
-                darken_factor = np.max(RGB_buffer[luma, chroma])
-                YUV_calc = np.matmul(RGB_to_YUV, RGB_buffer[luma, chroma])
-                RGB_buffer[luma, chroma] -= YUV_calc[0]
-                RGB_buffer[luma, chroma] /= darken_factor
-                RGB_buffer[luma, chroma] += YUV_calc[0]
 
 # B-Y and R-Y reduction factors
 # S170m-2004.pdf: Composite Analog Video Signal NTSC for Studio Applications. Page 16.
@@ -560,11 +575,13 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     sequence_counter = 0
 
     if (args.ppu == "2C07"):
+        # $x7 == -U +- 45 degrees == 7 + 1.5
         colorburst_phase = 8.5
     else:
+        # $x8 = -U
         colorburst_phase = 8
     # due to the way the waveform is encoded, the hue is off by 1/2 of a sample
-    colorburst_offset = colorburst_phase - 6 - 0.5
+    colorburst_offset = colorburst_phase - 5 - 0.5
 
     colorburst_factor = 6
     color_gen_clock_factor = 2
@@ -584,48 +601,72 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     # --BBBBBB----
     # -CCCCCC-----
 
-    voltage_buffer = np.empty([buffer_size], np.float64)
+    voltage_buffer = np.zeros((2, buffer_size), np.float64)
     U_buffer = np.empty([buffer_size], np.float64)
     V_buffer = np.empty([buffer_size], np.float64)
+    U_decode = np.empty([buffer_size], np.float64)
+    V_decode = np.empty([buffer_size], np.float64)
+    U_comb = np.empty([buffer_size], np.float64)
+    V_comb = np.empty([buffer_size], np.float64)
+
+    def in_color_phase(hue, phase):
+        return ((hue + phase) % 12) < 6
+
+    def pal_phase(hue):
+        if (hue >= 1 and hue <= 12):
+            return (-(hue - 5) % 12)
+        else: return hue
 
     for emphasis in range(8):
-        # emphasis bitmask, travelling from lsb to msb
-        emphasis_wave = 0
-        if bool(emphasis & 0b001):		# tint R; aligned to color phase C
-            emphasis_wave |= 0b000001111110;
-        if bool(emphasis & 0b010):		# tint G; aligned to color phase 4
-            emphasis_wave |= 0b111000000111;
-        if bool(emphasis & 0b100):		# tint B; aligned to color phase 8
-            emphasis_wave |= 0b011111100000;
 
         for luma in range(4):
             for hue in range(16):
                 # encode voltages into composite waveform
-                for wave_phase in range(12):
+                for wave_phase in range(buffer_size):
                     # 0 = waveform high; 1 = waveform low
-                    n_wave_level = 0
-                    # 1 = emphasis activate
-                    emphasis_level = int(bool(emphasis_wave & (1 << ((wave_phase - hue + 1) % 12))))
+                    n_wave_level = int(not in_color_phase(hue, wave_phase))
 
-                    if (wave_phase >= 6): n_wave_level = 1
+                    # 1 = emphasis activate
+                    emphasis_level = int((
+                        ((emphasis & 1) and in_color_phase(0xC, wave_phase)) or
+                        ((emphasis & 2) and in_color_phase(0x4, wave_phase)) or
+                        ((emphasis & 4) and in_color_phase(0x8, wave_phase))) and
+                        (hue < 0xE))
 
                     # rows $x0 amd $xD
-                    if (hue == 0x00): n_wave_level = 0
-                    if (hue == 0x0D): n_wave_level = 1
+                    if (hue == 0x0): n_wave_level = 0
+                    if (hue >= 0xD): n_wave_level = 1
 
                     #rows $xE-$xF
-                    if (hue >= 0x0E):
-                        voltage_buffer[wave_phase] = signal_table_composite[1, 1, 0]
-                    else:
-                        voltage_buffer[(wave_phase - hue + 1) % 12] = signal_table_composite[luma, n_wave_level, emphasis_level]
+                    luma_index = luma;
+                    if (hue >= 0xE):
+                        luma_index = 0x1
+
+                    voltage_buffer[0, wave_phase] = signal_table_composite[luma_index, n_wave_level, emphasis_level]
+
+                    # simulate next line by incrementing wave phase and alternating phase
+                    if (args.pal_comb_filter):
+                        # alternate color phase
+                        n_wave_level_alt = int(not in_color_phase(pal_phase(hue), wave_phase))
+
+                        emphasis_level_alt = int((
+                            ((emphasis & 1) and in_color_phase(pal_phase(0xC), wave_phase)) or
+                            ((emphasis & 2) and in_color_phase(pal_phase(0x4), wave_phase)) or
+                            ((emphasis & 4) and in_color_phase(pal_phase(0x8), wave_phase))) and
+                            (hue < 0xE))
+
+                        if (hue == 0x0 or hue >= 0xD): n_wave_level_alt = n_wave_level
+
+                        voltage_buffer[1, wave_phase] = signal_table_composite[luma_index, n_wave_level_alt, emphasis_level_alt]
 
                 # apply analog effects
                 antiemphasis_column_chroma = (
-                    args.antiemphasis_phase_skew if (
+                    args.antiemphasis_phase_skew if ((
                         hue == 0x2 or
                         hue == 0x6 or
-                        hue == 0xA)
+                        hue == 0xA) and not args.pal_comb_filter)
                     else 0)
+
                 emphasis_row_luma = (
                     args.emphasis_luma_attenuation if (
                         hue == 0x4 or
@@ -633,15 +674,17 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                         hue == 0xC)
                     else 0)
 
+                phase_skew = args.phase_skew * luma if not args.pal_comb_filter else 0
+
                 # decode voltage buffer to YUV
                 # based on SMPTE 170M-2004, page 17, section A.5, equation 10
-                # N = 0.925(Y) + 7.5 + 0.925*(U)*sin(2*π*f_sc*t) + 0.925*(V)*cos(2*π*f_sc*t) 
+                # N = 0.925(Y) + 7.5 + 0.925*(U)*sin(2*π*f_sc*t) + 0.925*(V)*cos(2*π*f_sc*t)
                 # scaling factor 0.925 is already accounted for during normalization
                 # luma pedestal 7.5 is already accounted for during normalization
-                
+
                 # shift blanking to 0
                 voltage_buffer -= signal_table_composite[1, 1, 0]
-                
+
                 # convert to IRE
                 voltage_buffer *= 140
 
@@ -649,39 +692,46 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 voltage_buffer += args.gain
 
                 # decode Y
+                # also apply brightness and contrast
+                YUV_buffer[emphasis, luma, hue, 0] = (np.average(voltage_buffer[0]) + emphasis_row_luma) * args.contrast + args.brightness
 
-                # apply brightness and contrast
-                YUV_buffer[emphasis, luma, hue, 0] = (np.average(voltage_buffer) + emphasis_row_luma + args.brightness) * args.contrast
+                # decode U and V
+                if (args.pal_comb_filter):
+                    # comb filter
+                    U_comb = (voltage_buffer[0] + voltage_buffer[1]) / 2
+                    V_comb = (voltage_buffer[0] - voltage_buffer[1]) / 2
+                else:
+                    U_comb = voltage_buffer[0].copy()
+                    V_comb = voltage_buffer[0].copy()
 
-                # decode U
-                # also apply hue and saturation
-                for t in range(12):
-                    U_buffer[t] = (voltage_buffer[t] - np.average(voltage_buffer) ) * 2 * np.sin(
-                        2 * np.pi / 12 * (t + colorburst_offset) +
-                        np.radians(
-                            args.hue + antiemphasis_column_chroma -
-                            (args.phase_skew * luma))
-                    ) * args.saturation
+                # highpass UV component
+                U_comb -= np.average(U_comb)
+                V_comb -= np.average(V_comb)
+
+                # apply hue and saturation in decode wave
+                t = np.arange(12)
+
+                U_decode = np.sin(2 * np.pi / 12 * (t + colorburst_offset) +
+                    np.radians(args.hue + antiemphasis_column_chroma - phase_skew)
+                ) * args.saturation * 2
+
+                V_decode = np.cos(2 * np.pi / 12 * (t + colorburst_offset) +
+                    np.radians(args.hue + antiemphasis_column_chroma - phase_skew)
+                ) * args.saturation * 2
+
+                U_buffer = U_comb * U_decode
+                V_buffer = V_comb * V_decode
+
                 YUV_buffer[emphasis, luma, hue, 1] = np.average(U_buffer)
-
-                # decode V
-                # also apply hue and saturation
-                for t in range(12):
-                    V_buffer[t] = (voltage_buffer[t] - np.average(voltage_buffer)) * 2 * np.cos(
-                        2 * np.pi / 12 * (t + colorburst_offset) +
-                        np.radians(
-                            args.hue + antiemphasis_column_chroma -
-                            (args.phase_skew * luma))
-                    ) * args.saturation
                 YUV_buffer[emphasis, luma, hue, 2] = np.average(V_buffer)
 
                 # visualize chroma decoding
                 if (args.debug):
-                    print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer))
+                    print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer[0]))
                 if (args.waveforms):
-                    composite_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counter, args)
+                    composite_waveform_plot(voltage_buffer[0], emphasis, luma, hue, sequence_counter, args)
                 if (args.phase_QAM):
-                    composite_QAM_plot(voltage_buffer, U_buffer, V_buffer, buffer_size, emphasis, luma, hue, sequence_counter, args, signal_black_point, signal_white_point)
+                    composite_QAM_plot(voltage_buffer, U_comb, V_comb, U_decode, V_decode, U_buffer, V_buffer, buffer_size, emphasis, luma, hue, sequence_counter, args, signal_black_point, signal_white_point)
 
                 sequence_counter += 1
 
@@ -691,12 +741,6 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
             break
 
     return YUV_buffer
-
-def rgb_oct_triplet_to_float_array(signal_triplet, emphasis):
-    red = ((signal_triplet & 0xF00) >> 8) if not (emphasis & 0b001) else 7
-    green = ((signal_triplet & 0x0F0) >> 4) if not (emphasis & 0b010) else 7
-    blue = ((signal_triplet & 0x00F)) if not (emphasis & 0b100) else 7
-    return np.array([red, green, blue], np.float64)
 
 def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white_point=None):
     signal_table_rgb = np.empty([0x40], np.uint16)
@@ -708,7 +752,7 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
                 0x333,0x014,0x006,0x326,0x403,0x503,0x510,0x420,0x320,0x120,0x031,0x040,0x022,0x111,0x003,0x020,
                 0x555,0x036,0x027,0x407,0x507,0x704,0x700,0x630,0x430,0x140,0x040,0x053,0x044,0x222,0x200,0x310,
                 0x777,0x357,0x447,0x637,0x707,0x737,0x740,0x750,0x660,0x360,0x070,0x276,0x077,0x444,0x000,0x000,
-                0x777,0x567,0x657,0x757,0x747,0x755,0x764,0x770,0x773,0x572,0x473,0x276,0x467,0x666,0x653,0x760 
+                0x777,0x567,0x657,0x757,0x747,0x755,0x764,0x770,0x773,0x572,0x473,0x276,0x467,0x666,0x653,0x760
             ], np.uint16)
         case _:
             # RGB PPU palettes LUT
@@ -721,16 +765,24 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
             ], np.uint16)
 
     IQ_tilt = np.radians(33)
+
     RGB_to_YIQ = np.array([
         RGB_to_YUV[0,:],
         ((RGB_to_YUV[1,:] * np.cos(IQ_tilt)) - (RGB_to_YUV[2,:]*np.sin(IQ_tilt))),
         ((RGB_to_YUV[1,:] * np.sin(IQ_tilt)) + (RGB_to_YUV[2,:]*np.cos(IQ_tilt)))
     ], np.float64)
+
     YUV_to_YIQ = np.array([
         [1, 0, 0],
         [0, np.cos(IQ_tilt), np.sin(IQ_tilt)],
         [0, -np.sin(IQ_tilt), np.cos(IQ_tilt)]
     ], np.float64)
+
+    def rgb_oct_triplet_to_float_array(signal_triplet, emphasis):
+        red = ((signal_triplet & 0xF00) >> 8) if not (emphasis & 0b001) else 7
+        green = ((signal_triplet & 0x0F0) >> 4) if not (emphasis & 0b010) else 7
+        blue = ((signal_triplet & 0x00F)) if not (emphasis & 0b100) else 7
+        return np.array([red, green, blue], np.float64)
 
     # 2C04 LUTs
     scramble = np.empty([0x40], np.uint8)
@@ -791,7 +843,7 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
                 # apply brightness and contrast
                 YUV_buffer[emphasis, luma, hue, 0] += args.brightness
                 YUV_buffer[emphasis, luma, hue, 0] *= args.contrast
-                
+
                 # apply hue
                 YUV_buffer[emphasis, luma, hue, 1] = (
                     (YUV_buffer[emphasis, luma, hue, 1] * np.cos(np.radians(args.hue))) -
@@ -805,7 +857,7 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
                 # apply saturation
                 YUV_buffer[emphasis, luma, hue, 1] *= args.saturation
                 YUV_buffer[emphasis, luma, hue, 2] *= args.saturation
-                
+
                 # convert to YUV for later decoding
                 YUV_buffer[emphasis, luma, hue] = np.matmul(YUV_to_YIQ, YUV_buffer[emphasis, luma, hue])
 
@@ -847,7 +899,7 @@ def output_png(RGB_buffer, args=None):
         sys.exit("error: this format does not support emphasis")
     from PIL import Image, ImagePalette
     imgindex = np.arange(0, int(RGB_buffer.size/3), dtype=np.uint8)
-    
+
     img = Image.frombytes('P', (RGB_buffer.shape[1],RGB_buffer.shape[0]), imgindex)
     # convert to list of uint8
     RGB_buffer_uint8 = list(
@@ -1038,7 +1090,7 @@ def main(argv=None):
 
         if (args.display_primaries_r is not None
             and args.display_primaries_g is not None
-            and args.display_primaries_b is not None): 
+            and args.display_primaries_b is not None):
             t_colorspace.name = "custom primaries"
             t_colorspace.primaries = np.array([
                 args.display_primaries_r,
@@ -1071,7 +1123,7 @@ def main(argv=None):
 
                 if (args.white_point is not None):
                     signal_white_point = args.white_point
-                    
+
                 # we use RGB_buffer[] as a temporary buffer for YUV
                 RGB_buffer = pixel_codec_rgb(RGB_buffer, args, signal_black_point, signal_white_point)
             case "2C02"|"2C07":
@@ -1141,7 +1193,7 @@ def main(argv=None):
         # clip again, the transform may produce values beyond 0-1
         normalize_RGB(RGB_buffer, args)
         normalize_RGB(RGB_uncorrected, args)
-        
+
         output_format = {
             ".pal uint8": output_binary_uint8,
             ".pal double": output_binary_double,
@@ -1151,7 +1203,7 @@ def main(argv=None):
             ".h uint8_t": output_cstyle_table,
             ".gpl": output_gimp_pal,
             ".png": output_png
-            
+
         }
         if (args.output is not None):
             output_format[args.file_format](RGB_buffer, args)
