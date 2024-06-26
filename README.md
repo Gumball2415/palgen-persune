@@ -30,8 +30,9 @@ usage: palgen_persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                          [-c {darken,desaturate}] [-bri BRIGHTNESS]
                          [-con CONTRAST] [-hue HUE] [-sat SATURATION]
                          [-blp BLACK_POINT] [-whp WHITE_POINT] [-gai GAIN]
-                         [--pal-comb-filter] [-phs PHASE_SKEW]
-                         [-aps ANTIEMPHASIS_PHASE_SKEW]
+                         [--pal-comb-filter]
+                         [-axs {None,CXA2025AS_JP,CXA2025AS_US}]
+                         [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
                          [-ela EMPHASIS_LUMA_ATTENUATION]
                          [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
                          [-cat CHROMATIC_ADAPTATION_TRANSFORM] [-ict]
@@ -87,6 +88,9 @@ options:
                         units, default = 0.0
   --pal-comb-filter     use 1D comb filter decoding on 2C07 phase alternation
                         instead of single-phase decoding
+  -axs {None,CXA2025AS_JP,CXA2025AS_US}, --axis-shift {None,CXA2025AS_JP,CXA2025AS_US}
+                        axis adjustment for R-Y and G-Y like Sony CXA2025AS,
+                        default = None
   -phs PHASE_SKEW, --phase-skew PHASE_SKEW
                         differential phase distortion for composite PPUs, in
                         degrees, default = 0.0
@@ -144,7 +148,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.12.3
+version 0.12.4
 ```
 
 ## License

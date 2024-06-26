@@ -12,3 +12,4 @@
 /Scripts
 /share
 /pyvenv.cfg
+/generated/*

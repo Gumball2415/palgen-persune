@@ -23,7 +23,7 @@ import numpy as np
 import colour.models
 import colour.plotting.diagrams
 
-VERSION = "0.12.3"
+VERSION = "0.12.4"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -168,6 +168,17 @@ def parse_argv(argv):
         "--pal-comb-filter",
         action = "store_true",
         help = "use 1D comb filter decoding on 2C07 phase alternation instead of single-phase decoding")
+    parser.add_argument(
+        "-axs",
+        "--axis-shift",
+        type = str,
+        help = "axis adjustment for R-Y and G-Y like Sony CXA2025AS, default = None",
+        choices=[
+            "None",
+            "CXA2025AS_JP",
+            "CXA2025AS_US",
+        ],
+        default = "None")
 
     # analog effects options
     parser.add_argument(
@@ -545,6 +556,32 @@ RGB_to_YUV = np.array([
     [ 0.299,        0.587,        0.114],
     [-0.299*BY_rf, -0.587*BY_rf,  0.886*BY_rf],
     [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
+], np.float64)
+
+# thanks, NewRisingSun!
+# Sony CXA2025AS axis offsets from the datasheet
+YUV_to_RGB = np.linalg.inv(RGB_to_YUV)
+
+CXA_JP_RY_angle = 95
+CXA_JP_RY_gain = 0.78 / BY_rf
+CXA_JP_GY_angle = 240
+CXA_JP_GY_gain = 0.30 / BY_rf
+
+CXA_US_RY_angle = 112
+CXA_US_RY_gain = 0.83 / BY_rf
+CXA_US_GY_angle = 252
+CXA_US_GY_gain = 0.30 / BY_rf
+
+YUV_to_RGB_CXA_JP = np.array([
+    [YUV_to_RGB[0,0], np.sin(CXA_JP_RY_angle)*CXA_JP_RY_gain*YUV_to_RGB[0,1], np.cos(CXA_JP_RY_angle)*CXA_JP_RY_gain*YUV_to_RGB[0,2]],
+    [YUV_to_RGB[1,0], np.sin(CXA_JP_GY_angle)*CXA_JP_GY_gain*YUV_to_RGB[1,1], np.cos(CXA_JP_GY_angle)*CXA_JP_GY_gain*YUV_to_RGB[1,2]],
+    YUV_to_RGB[2,:]
+], np.float64)
+
+YUV_to_RGB_CXA_US = np.array([
+    [YUV_to_RGB[0,0], np.sin(CXA_US_RY_angle)*CXA_US_RY_gain*YUV_to_RGB[0,1], np.cos(CXA_US_RY_angle)*CXA_US_RY_gain*YUV_to_RGB[0,2]],
+    [YUV_to_RGB[1,0], np.sin(CXA_US_GY_angle)*CXA_US_GY_gain*YUV_to_RGB[1,1], np.cos(CXA_US_GY_angle)*CXA_US_GY_gain*YUV_to_RGB[1,2]],
+    YUV_to_RGB[2,:]
 ], np.float64)
 
 # signal LUTs
@@ -971,79 +1008,6 @@ def output_cstyle_table(RGB_buffer, args=None):
                         np.uint8(np.around(RGB_buffer[luma, hue, 2] * 0xFF))))
             Palette_file.write("\n")
 
-# debugging, don't mind this
-def NES_SMPTE_plot(RGB_uncorrected, emphasis, args=None):
-    import matplotlib.pyplot as plt
-    if (args.skip_plot):
-        return
-    if not args.emphasis:
-        RGB_sub_raw = RGB_uncorrected
-    else:
-        RGB_sub_raw = np.split(RGB_uncorrected, 8, 0)[emphasis]
-
-    print(RGB_sub_raw.shape)
-    RGB_sub_raw_SMPTE = np.zeros([7,3], np.float64)
-
-    RGB_SMPTE = np.array([
-        [0.75, 0.75, 0.75],
-        [0.75, 0.75, 0],
-        [0, 0.75, 0.75],
-        [0, 0.75, 0],
-        [0.75, 0, 0.75],
-        [0.75, 0, 0],
-        [0, 0, 0.75],
-    ], np.float64)
-
-    YUV_SMPTE = np.zeros(RGB_SMPTE.shape, np.float64)
-    YUV_SMPTE[0,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[0, :])
-    YUV_SMPTE[1,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[1, :])
-    YUV_SMPTE[2,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[2, :])
-    YUV_SMPTE[3,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[3, :])
-    YUV_SMPTE[4,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[4, :])
-    YUV_SMPTE[5,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[5, :])
-    YUV_SMPTE[6,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[6, :])
-
-    RGB_sub_raw_SMPTE[0,:] = RGB_sub_raw[emphasis, 0x1, 0x0, :]
-    RGB_sub_raw_SMPTE[1,:] = RGB_sub_raw[emphasis, 0x2, 0x8, :]
-    RGB_sub_raw_SMPTE[2,:] = RGB_sub_raw[emphasis, 0x2, 0xC, :]
-    RGB_sub_raw_SMPTE[3,:] = RGB_sub_raw[emphasis, 0x1, 0xA, :]
-    RGB_sub_raw_SMPTE[4,:] = RGB_sub_raw[emphasis, 0x1, 0x4, :]
-    RGB_sub_raw_SMPTE[5,:] = RGB_sub_raw[emphasis, 0x1, 0x6, :]
-    RGB_sub_raw_SMPTE[6,:] = RGB_sub_raw[emphasis, 0x0, 0x2, :]
-
-    color_theta_SMPTE = np.arctan2(YUV_SMPTE[:, 2], YUV_SMPTE[:, 1])
-    color_r_SMPTE = np.sqrt(YUV_SMPTE[:, 2]**2 + YUV_SMPTE[:, 1]**2)
-
-    YUV_calc = np.zeros(RGB_sub_raw_SMPTE.shape, np.float64)
-    YUV_calc[0,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[0, :])
-    YUV_calc[1,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[1, :])
-    YUV_calc[2,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[2, :])
-    YUV_calc[3,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[3, :])
-    YUV_calc[4,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[4, :])
-    YUV_calc[5,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[5, :])
-    YUV_calc[6,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[6, :])
-
-    color_theta = np.arctan2(YUV_calc[:, 2], YUV_calc[:, 1])
-    color_r = np.sqrt(YUV_calc[:, 2]**2 + YUV_calc[:, 1]**2)
-
-    print(YUV_calc)
-
-    fig = plt.figure(tight_layout=True, dpi=96)
-    gs = gridspec.GridSpec(2, 2)
-    ax1 = fig.add_subplot(gs[:, :], projection='polar')
-    fig.suptitle('NES palette')
-
-    ax1.set_title("Vectorscope Plot")
-    ax1.set_yticklabels([])
-    ax1.axis([0, 2*np.pi, 0, 0.5])
-    ax1.scatter(color_theta_SMPTE, color_r_SMPTE, c=RGB_SMPTE, marker=None, s=color_r*500, zorder=3)
-    ax1.plot(color_theta, color_r, marker=None, zorder=3)
-
-    fig.set_size_inches(20, 11.25)
-    fig.tight_layout()
-    plt.show()
-    plt.close()
-
 def main(argv=None):
     args = parse_argv(argv or sys.argv)
 
@@ -1146,7 +1110,13 @@ def main(argv=None):
             RGB_buffer = np.reshape(RGB_buffer,(4, 16, 3))
 
         # convert back to RGB
-        RGB_buffer = np.einsum('ij,klj->kli', np.linalg.inv(RGB_to_YUV), RGB_buffer, dtype=np.float64)
+        YUV_to_RGB_matrix = {
+            "None": YUV_to_RGB,
+            "CXA2025AS_JP": YUV_to_RGB_CXA_JP,
+            "CXA2025AS_US": YUV_to_RGB_CXA_US
+        }
+
+        RGB_buffer = np.einsum('ij,klj->kli', YUV_to_RGB_matrix[args.axis_shift], RGB_buffer, dtype=np.float64)
 
         # apply black and white points
         # this also scales the values back roughly within range of 0 to 1
@@ -1221,3 +1191,76 @@ def main(argv=None):
 
 if __name__=='__main__':
     main(sys.argv)
+
+# debugging, don't mind this
+def NES_SMPTE_plot(RGB_uncorrected, emphasis, args=None):
+    import matplotlib.pyplot as plt
+    if (args.skip_plot):
+        return
+    if not args.emphasis:
+        RGB_sub_raw = RGB_uncorrected
+    else:
+        RGB_sub_raw = np.split(RGB_uncorrected, 8, 0)[emphasis]
+
+    print(RGB_sub_raw.shape)
+    RGB_sub_raw_SMPTE = np.zeros([7,3], np.float64)
+
+    RGB_SMPTE = np.array([
+        [0.75, 0.75, 0.75],
+        [0.75, 0.75, 0],
+        [0, 0.75, 0.75],
+        [0, 0.75, 0],
+        [0.75, 0, 0.75],
+        [0.75, 0, 0],
+        [0, 0, 0.75],
+    ], np.float64)
+
+    YUV_SMPTE = np.zeros(RGB_SMPTE.shape, np.float64)
+    YUV_SMPTE[0,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[0, :])
+    YUV_SMPTE[1,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[1, :])
+    YUV_SMPTE[2,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[2, :])
+    YUV_SMPTE[3,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[3, :])
+    YUV_SMPTE[4,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[4, :])
+    YUV_SMPTE[5,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[5, :])
+    YUV_SMPTE[6,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[6, :])
+
+    RGB_sub_raw_SMPTE[0,:] = RGB_sub_raw[emphasis, 0x1, 0x0, :]
+    RGB_sub_raw_SMPTE[1,:] = RGB_sub_raw[emphasis, 0x2, 0x8, :]
+    RGB_sub_raw_SMPTE[2,:] = RGB_sub_raw[emphasis, 0x2, 0xC, :]
+    RGB_sub_raw_SMPTE[3,:] = RGB_sub_raw[emphasis, 0x1, 0xA, :]
+    RGB_sub_raw_SMPTE[4,:] = RGB_sub_raw[emphasis, 0x1, 0x4, :]
+    RGB_sub_raw_SMPTE[5,:] = RGB_sub_raw[emphasis, 0x1, 0x6, :]
+    RGB_sub_raw_SMPTE[6,:] = RGB_sub_raw[emphasis, 0x0, 0x2, :]
+
+    color_theta_SMPTE = np.arctan2(YUV_SMPTE[:, 2], YUV_SMPTE[:, 1])
+    color_r_SMPTE = np.sqrt(YUV_SMPTE[:, 2]**2 + YUV_SMPTE[:, 1]**2)
+
+    YUV_calc = np.zeros(RGB_sub_raw_SMPTE.shape, np.float64)
+    YUV_calc[0,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[0, :])
+    YUV_calc[1,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[1, :])
+    YUV_calc[2,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[2, :])
+    YUV_calc[3,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[3, :])
+    YUV_calc[4,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[4, :])
+    YUV_calc[5,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[5, :])
+    YUV_calc[6,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[6, :])
+
+    color_theta = np.arctan2(YUV_calc[:, 2], YUV_calc[:, 1])
+    color_r = np.sqrt(YUV_calc[:, 2]**2 + YUV_calc[:, 1]**2)
+
+    print(YUV_calc)
+
+    fig = plt.figure(tight_layout=True, dpi=96)
+    gs = gridspec.GridSpec(2, 2)
+    ax1 = fig.add_subplot(gs[:, :], projection='polar')
+    fig.suptitle('NES palette')
+
+    ax1.set_title("Vectorscope Plot")
+    ax1.set_yticklabels([])
+    ax1.axis([0, 2*np.pi, 0, 0.5])
+    ax1.scatter(color_theta_SMPTE, color_r_SMPTE, c=RGB_SMPTE, marker=None, s=color_r*500, zorder=3)
+    ax1.plot(color_theta, color_r, marker=None, zorder=3)
+
+    fig.set_size_inches(20, 11.25)
+    fig.tight_layout()
+    plt.show()
+    plt.close()
