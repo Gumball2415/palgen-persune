@@ -1,4 +1,5 @@
 palgen_persune.py --skip-plot -aps 5 -ela 0.01429 -e -o docs/example_palettes/2C02_aps_ela_default
+palgen_persune.py --skip-plot -hue 15 -sat 0.6 -gam 2 -e -o docs/example_palettes/bisqwit_savtool_replica
 palgen_persune.py --skip-plot -aps 5 -ela 0.01429 -e -hue 3.75 -sat 0.8 -o docs/example_palettes/2C02-2C07_aps_ela_persune_neutral
 palgen_persune.py --skip-plot -aps 5 -ela 0.01429 -phs -5.0 -blp 7.5 -e -o docs/example_palettes/2C02G_phs_aps_ela_NTSC
 palgen_persune.py --skip-plot -aps 5 -ela 0.01429 -phs -5.0 -blp 7.5 -rfc "NTSC (1953)" -e -o docs/example_palettes/2C02G_phs_aps_ela_NTSC-1953

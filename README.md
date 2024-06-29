@@ -7,7 +7,9 @@ yet another NES palette generator, in Python
 <img src="docs/QAM phase.gif">
 <img src="docs/palette preview emphasis.gif">
 
-something to note: there _is_ no one true NES palette, but this generator can pretty much approach colors that looks good enough. feel free to adjust to taste!
+something to note: there _is_ no one true NES palette, but this generator
+can pretty much approach colors that looks good enough.
+feel free to adjust to taste!
 
 ## Requirements
 
@@ -30,7 +32,7 @@ usage: palgen_persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                          [-c {darken,desaturate}] [-bri BRIGHTNESS]
                          [-con CONTRAST] [-hue HUE] [-sat SATURATION]
                          [-blp BLACK_POINT] [-whp WHITE_POINT] [-gai GAIN]
-                         [--pal-comb-filter]
+                         [-gam GAMMA] [--pal-comb-filter]
                          [-axs {None,CXA2025AS_JP,CXA2025AS_US}]
                          [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
                          [-ela EMPHASIS_LUMA_ATTENUATION]
@@ -86,6 +88,10 @@ options:
   -gai GAIN, --gain GAIN
                         gain adjustment to signal before decoding, in IRE
                         units, default = 0.0
+  -gam GAMMA, --gamma GAMMA
+                        if defined, will apply a simple OETF gamma transfer
+                        function instead, where the EOTF function is assumed
+                        to be gamma 2.2.
   --pal-comb-filter     use 1D comb filter decoding on 2C07 phase alternation
                         instead of single-phase decoding
   -axs {None,CXA2025AS_JP,CXA2025AS_US}, --axis-shift {None,CXA2025AS_JP,CXA2025AS_US}
@@ -148,7 +154,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.12.4
+version 0.12.5
 ```
 
 ## License

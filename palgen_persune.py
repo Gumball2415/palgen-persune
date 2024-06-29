@@ -16,14 +16,11 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+import os, sys
 import argparse
-import os
-import sys
 import numpy as np
-import colour.models
-import colour.plotting.diagrams
 
-VERSION = "0.12.4"
+VERSION = "0.12.5"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -165,6 +162,11 @@ def parse_argv(argv):
         help = "gain adjustment to signal before decoding, in IRE units, default = 0.0",
         default = 0.0)
     parser.add_argument(
+        "-gam",
+        "--gamma",
+        type = np.float64,
+        help = "if defined, will apply a simple OETF gamma transfer function instead, where the EOTF function is assumed to be gamma 2.2.")
+    parser.add_argument(
         "--pal-comb-filter",
         action = "store_true",
         help = "use 1D comb filter decoding on 2C07 phase alternation instead of single-phase decoding")
@@ -298,6 +300,68 @@ def parse_argv(argv):
         help = "set custom display whitepoint, in CIE xy chromaticity coordinates")
 
     return parser.parse_args(argv[1:])
+
+# B-Y and R-Y reduction factors
+# S170m-2004.pdf: Composite Analog Video Signal NTSC for Studio Applications. Page 16.
+BY_rf = 0.492111
+RY_rf = 0.877283
+
+# derived from the NTSC base matrix of luminance and color-difference
+# S170m-2004.pdf: Composite Analog Video Signal NTSC for Studio Applications. Page 4.
+RGB_to_YUV = np.array([
+    [ 0.299,        0.587,        0.114],
+    [-0.299*BY_rf, -0.587*BY_rf,  0.886*BY_rf],
+    [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
+], np.float64)
+
+# thanks, NewRisingSun!
+# Sony CXA2025AS axis offsets from the datasheet
+YUV_to_RGB = np.linalg.inv(RGB_to_YUV)
+
+CXA_JP_RY_angle = 95
+CXA_JP_RY_gain = 0.78 / BY_rf
+CXA_JP_GY_angle = 240
+CXA_JP_GY_gain = 0.30 / BY_rf
+
+CXA_US_RY_angle = 112
+CXA_US_RY_gain = 0.83 / BY_rf
+CXA_US_GY_angle = 252
+CXA_US_GY_gain = 0.30 / BY_rf
+
+YUV_to_RGB_CXA_JP = np.array([
+    [YUV_to_RGB[0,0], np.sin(CXA_JP_RY_angle)*CXA_JP_RY_gain*YUV_to_RGB[0,1], np.cos(CXA_JP_RY_angle)*CXA_JP_RY_gain*YUV_to_RGB[0,2]],
+    [YUV_to_RGB[1,0], np.sin(CXA_JP_GY_angle)*CXA_JP_GY_gain*YUV_to_RGB[1,1], np.cos(CXA_JP_GY_angle)*CXA_JP_GY_gain*YUV_to_RGB[1,2]],
+    YUV_to_RGB[2,:]
+], np.float64)
+
+YUV_to_RGB_CXA_US = np.array([
+    [YUV_to_RGB[0,0], np.sin(CXA_US_RY_angle)*CXA_US_RY_gain*YUV_to_RGB[0,1], np.cos(CXA_US_RY_angle)*CXA_US_RY_gain*YUV_to_RGB[0,2]],
+    [YUV_to_RGB[1,0], np.sin(CXA_US_GY_angle)*CXA_US_GY_gain*YUV_to_RGB[1,1], np.cos(CXA_US_GY_angle)*CXA_US_GY_gain*YUV_to_RGB[1,2]],
+    YUV_to_RGB[2,:]
+], np.float64)
+
+# signal LUTs
+# voltage highs and lows
+# from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
+# signal[4][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
+signal_table_composite = np.array([
+    [
+        [ 0.616, 0.500 ],
+        [ 0.228, 0.192 ]
+    ],
+    [
+        [ 0.840, 0.676 ],
+        [ 0.312, 0.256 ]
+    ],
+    [
+        [ 1.100, 0.896 ],
+        [ 0.552, 0.448 ]
+    ],
+    [
+        [ 1.100, 0.896 ],
+        [ 0.880, 0.712 ]
+    ]
+], np.float64)
 
 # figure plotting for palette preview
 # TODO: interactivity
@@ -545,68 +609,6 @@ def normalize_RGB(RGB_buffer, args=None):
     # clip to 0.0-1.0 to ensure everything is within range
     np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
 
-# B-Y and R-Y reduction factors
-# S170m-2004.pdf: Composite Analog Video Signal NTSC for Studio Applications. Page 16.
-BY_rf = 0.492111
-RY_rf = 0.877283
-
-# derived from the NTSC base matrix of luminance and color-difference
-# S170m-2004.pdf: Composite Analog Video Signal NTSC for Studio Applications. Page 4.
-RGB_to_YUV = np.array([
-    [ 0.299,        0.587,        0.114],
-    [-0.299*BY_rf, -0.587*BY_rf,  0.886*BY_rf],
-    [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
-], np.float64)
-
-# thanks, NewRisingSun!
-# Sony CXA2025AS axis offsets from the datasheet
-YUV_to_RGB = np.linalg.inv(RGB_to_YUV)
-
-CXA_JP_RY_angle = 95
-CXA_JP_RY_gain = 0.78 / BY_rf
-CXA_JP_GY_angle = 240
-CXA_JP_GY_gain = 0.30 / BY_rf
-
-CXA_US_RY_angle = 112
-CXA_US_RY_gain = 0.83 / BY_rf
-CXA_US_GY_angle = 252
-CXA_US_GY_gain = 0.30 / BY_rf
-
-YUV_to_RGB_CXA_JP = np.array([
-    [YUV_to_RGB[0,0], np.sin(CXA_JP_RY_angle)*CXA_JP_RY_gain*YUV_to_RGB[0,1], np.cos(CXA_JP_RY_angle)*CXA_JP_RY_gain*YUV_to_RGB[0,2]],
-    [YUV_to_RGB[1,0], np.sin(CXA_JP_GY_angle)*CXA_JP_GY_gain*YUV_to_RGB[1,1], np.cos(CXA_JP_GY_angle)*CXA_JP_GY_gain*YUV_to_RGB[1,2]],
-    YUV_to_RGB[2,:]
-], np.float64)
-
-YUV_to_RGB_CXA_US = np.array([
-    [YUV_to_RGB[0,0], np.sin(CXA_US_RY_angle)*CXA_US_RY_gain*YUV_to_RGB[0,1], np.cos(CXA_US_RY_angle)*CXA_US_RY_gain*YUV_to_RGB[0,2]],
-    [YUV_to_RGB[1,0], np.sin(CXA_US_GY_angle)*CXA_US_GY_gain*YUV_to_RGB[1,1], np.cos(CXA_US_GY_angle)*CXA_US_GY_gain*YUV_to_RGB[1,2]],
-    YUV_to_RGB[2,:]
-], np.float64)
-
-# signal LUTs
-# voltage highs and lows
-# from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
-# signal[4][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
-signal_table_composite = np.array([
-    [
-        [ 0.616, 0.500 ],
-        [ 0.228, 0.192 ]
-    ],
-    [
-        [ 0.840, 0.676 ],
-        [ 0.312, 0.256 ]
-    ],
-    [
-        [ 1.100, 0.896 ],
-        [ 0.552, 0.448 ]
-    ],
-    [
-        [ 1.100, 0.896 ],
-        [ 0.880, 0.712 ]
-    ]
-], np.float64)
-
 def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal_white_point=None):
     # used for image sequence plotting
     sequence_counter = 0
@@ -822,7 +824,7 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
         return np.array([red, green, blue], np.float64)
 
     # 2C04 LUTs
-    scramble = np.empty([0x40], np.uint8)
+    scramble = np.array(np.arange(0x00, 0x40), np.uint8)
     match args.ppu:
         case "2C04-0001":
             scramble = np.array([
@@ -852,8 +854,6 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
                 0x05,0x0A,0x07,0x02,0x13,0x14,0x00,0x15,0x0C,0x3D,0x11,0x0F,0x0D,0x38,0x2D,0x24,
                 0x33,0x20,0x08,0x16,0x3F,0x2B,0x20,0x3C,0x2E,0x27,0x23,0x31,0x29,0x32,0x2C,0x09
             ], np.uint8)
-        case _:
-            scramble = np.arange(0x00, 0x40)
 
     for emphasis in range(8):
         for luma in range(4):
@@ -861,7 +861,10 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
                 color_byte = (luma << 4) | hue
 
                 # decode palette LUT to RGB
-                YUV_buffer[emphasis, luma, hue] = rgb_oct_triplet_to_float_array(signal_table_rgb[scramble[color_byte]], emphasis) / 7
+                YUV_buffer[emphasis, luma, hue] = rgb_oct_triplet_to_float_array(
+                    signal_table_rgb[scramble[color_byte]],
+                    emphasis
+                ) / 7
 
                 # convert to IRE scale so that i don't have to complicate black/white points
                 YUV_buffer[emphasis, luma, hue] *= 100
@@ -1014,6 +1017,9 @@ def main(argv=None):
     if (args.skip_plot) and (args.output is None) and not (args.render_img is not None):
         sys.exit("warning! palette is generated but not plotted or outputted")
 
+    import colour.models
+    import colour.plotting.diagrams
+
     # special thanks to NewRisingSun for teaching me how chromatic adaptations work!
     # special thanks to _aitchFactor for pointing out that colour-science has
     # chromatic adaptation functions!
@@ -1133,7 +1139,32 @@ def main(argv=None):
         RGB_uncorrected = RGB_buffer
 
         # convert RGB to display output
-        if ((args.electro_optic != args.opto_electronic) or (t_colorspace != s_colorspace)
+        if (args.gamma):
+            # convert linear signal to linear light, if permitted
+            if (not args.electro_optic_disable):
+                RGB_buffer = colour.gamma_function(RGB_buffer, 2.2)
+                RGB_uncorrected = colour.gamma_function(RGB_uncorrected, 2.2)
+
+            # transform color primaries
+            if (t_colorspace != s_colorspace):
+                if (args.inverse_chromatic_transform):
+                    RGB_buffer = colour.RGB_to_RGB(
+                        RGB_buffer,
+                        t_colorspace,
+                        s_colorspace,
+                        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
+                else:
+                    RGB_buffer = colour.RGB_to_RGB(
+                        RGB_buffer,
+                        s_colorspace,
+                        t_colorspace,
+                        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
+
+            # convert linear light to linear signal, if permitted
+            if (not args.opto_electronic_disable):
+                RGB_buffer = colour.gamma_function(RGB_buffer, 1/args.gamma)
+                RGB_uncorrected = colour.gamma_function(RGB_uncorrected, 1/args.gamma)
+        elif ((args.electro_optic != args.opto_electronic) or (t_colorspace != s_colorspace)
             or (args.electro_optic_disable) or (args.opto_electronic_disable)):
             # convert linear signal to linear light, if permitted
             if (not args.electro_optic_disable):
