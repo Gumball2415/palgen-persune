@@ -6,5 +6,6 @@ palgen_persune.py -h >> usage.txt
 echo 
 pause
 call "make palettes.bat"
+call "make wiki palettes.bat"
 cd docs
 call "frames to gif.bat"
