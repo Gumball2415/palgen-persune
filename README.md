@@ -32,7 +32,7 @@ usage: palgen_persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                          [-c {darken,desaturate}] [-bri BRIGHTNESS]
                          [-con CONTRAST] [-hue HUE] [-sat SATURATION]
                          [-blp BLACK_POINT] [-whp WHITE_POINT] [-gai GAIN]
-                         [-gam GAMMA] [--pal-comb-filter]
+                         [-gam GAMMA] [--delay-line-filter]
                          [-axs {None,CXA2025AS_JP,CXA2025AS_US}]
                          [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
                          [-ela EMPHASIS_LUMA_ATTENUATION]
@@ -92,8 +92,8 @@ options:
                         if defined, will apply a simple OETF gamma transfer
                         function instead, where the EOTF function is assumed
                         to be gamma 2.2.
-  --pal-comb-filter     use 1D comb filter decoding on 2C07 phase alternation
-                        instead of single-phase decoding
+  --delay-line-filter   use 1D delay line comb filter decoding instead of
+                        single-line decoding
   -axs {None,CXA2025AS_JP,CXA2025AS_US}, --axis-shift {None,CXA2025AS_JP,CXA2025AS_US}
                         axis adjustment for R-Y and G-Y like Sony CXA2025AS,
                         default = None
@@ -108,23 +108,23 @@ options:
                         composite PPUs, in voltage units, default = 0.0
   -rfc REFERENCE_COLORSPACE, --reference-colorspace REFERENCE_COLORSPACE
                         use colour.RGB_COLOURSPACES reference colorspace,
-                        default = "ITU-R BT.709"
+                        default = "NTSC (1987)"
   -dsc DISPLAY_COLORSPACE, --display-colorspace DISPLAY_COLORSPACE
-                        Use colour.RGB_COLOURSPACES display colorspace,
-                        default = "ITU-R BT.709"
+                        use colour.RGB_COLOURSPACES display colorspace,
+                        default = "sRGB"
   -cat CHROMATIC_ADAPTATION_TRANSFORM, --chromatic-adaptation-transform CHROMATIC_ADAPTATION_TRANSFORM
                         chromatic adaptation transform method, default = None
   -ict, --inverse-chromatic-transform
                         invert direction of chromatic adaptation transform
-                        method (from display to reference)
+                        method (from display to reference colorspace)
   -oetf OPTO_ELECTRONIC, --opto-electronic OPTO_ELECTRONIC
                         applies "colour.models" color component transform
-                        function to use as opto-electronic transform function,
-                        default = "ITU-R BT.709"
+                        function to use as opto-electronic transform function
+                        override
   -eotf ELECTRO_OPTIC, --electro-optic ELECTRO_OPTIC
                         applies "colour.models" color component transform
-                        function to use as electro-optic transform function,
-                        default = "ITU-R BT.709"
+                        function to use as electro-optic transform function
+                        override
   --opto-electronic-disable
                         disable converting linear light to linear signal
   --electro-optic-disable
@@ -154,7 +154,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.12.5
+version 0.13.0
 ```
 
 ## License

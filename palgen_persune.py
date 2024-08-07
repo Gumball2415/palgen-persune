@@ -20,7 +20,7 @@ import os, sys
 import argparse
 import numpy as np
 
-VERSION = "0.12.5"
+VERSION = "0.13.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -167,9 +167,9 @@ def parse_argv(argv):
         type = np.float64,
         help = "if defined, will apply a simple OETF gamma transfer function instead, where the EOTF function is assumed to be gamma 2.2.")
     parser.add_argument(
-        "--pal-comb-filter",
+        "--delay-line-filter",
         action = "store_true",
-        help = "use 1D comb filter decoding on 2C07 phase alternation instead of single-phase decoding")
+        help = "use 1D delay line comb filter decoding instead of single-line decoding")
     parser.add_argument(
         "-axs",
         "--axis-shift",
@@ -207,14 +207,14 @@ def parse_argv(argv):
         "-rfc",
         "--reference-colorspace",
         type = str,
-        help = "use colour.RGB_COLOURSPACES reference colorspace, default = \"ITU-R BT.709\"",
-        default = 'ITU-R BT.709')
+        help = "use colour.RGB_COLOURSPACES reference colorspace, default = \"NTSC (1987)\"",
+        default = 'NTSC (1987)')
     parser.add_argument(
         "-dsc",
         "--display-colorspace",
         type = str,
-        help = "Use colour.RGB_COLOURSPACES display colorspace, default = \"ITU-R BT.709\"",
-        default = 'ITU-R BT.709')
+        help = "use colour.RGB_COLOURSPACES display colorspace, default = \"sRGB\"",
+        default = 'sRGB')
     parser.add_argument(
         "-cat",
         "--chromatic-adaptation-transform",
@@ -225,19 +225,19 @@ def parse_argv(argv):
         "-ict",
         "--inverse-chromatic-transform",
         action="store_true",
-        help = "invert direction of chromatic adaptation transform method (from display to reference)")
+        help = "invert direction of chromatic adaptation transform method (from display to reference colorspace)")
     parser.add_argument(
         "-oetf",
         "--opto-electronic",
         type=str,
-        help="applies \"colour.models\" color component transform function to use as opto-electronic transform function, default = \"ITU-R BT.709\"",
-        default = "ITU-R BT.709")
+        help="applies \"colour.models\" color component transform function to use as opto-electronic transform function override",
+        )
     parser.add_argument(
         "-eotf",
         "--electro-optic",
         type=str,
-        help="applies \"colour.models\" color component transform function to use as electro-optic transform function, default = \"ITU-R BT.709\"",
-        default = "ITU-R BT.709")
+        help="applies \"colour.models\" color component transform function to use as electro-optic transform function override",
+        )
     parser.add_argument(
         "--opto-electronic-disable",
         action = "store_true",
@@ -362,6 +362,9 @@ signal_table_composite = np.array([
         [ 0.880, 0.712 ]
     ]
 ], np.float64)
+
+composite_black = signal_table_composite[1, 1, 0]
+composite_white = signal_table_composite[3, 0, 0]
 
 # figure plotting for palette preview
 # TODO: interactivity
@@ -512,7 +515,7 @@ def composite_QAM_plot(voltage_buffer,
     axY.set_ylabel("IRE")
     axY.axis([0, buffer_size, -50, range_axis])
     axY.plot(x, voltage_buffer[0], 'o-', linewidth=0.7, label='composite signal')
-    if (args.pal_comb_filter):
+    if (args.delay_line_filter):
         axY.plot(x, voltage_buffer[1], 'o-', linewidth=0.7, label='composite signal delay')
     axY.plot(x, np.full((buffer_size), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format(Y_avg))
     axY.legend(loc='lower right')
@@ -612,13 +615,17 @@ def normalize_RGB(RGB_buffer, args=None):
 def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal_white_point=None):
     # used for image sequence plotting
     sequence_counter = 0
+    colorburst_phase = 0
+    next_line_shift = 0
 
     if (args.ppu == "2C07"):
         # $x7 == -U +- 45 degrees == 7 + 1.5
-        colorburst_phase = 8.5
+        colorburst_phase = 7 + 1.5
+        next_line_shift = 2
     else:
         # $x8 = -U
         colorburst_phase = 8
+        next_line_shift = 4
     # due to the way the waveform is encoded, the hue is off by 1/2 of a sample
     colorburst_offset = colorburst_phase - 5 - 0.5
 
@@ -640,7 +647,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     # --BBBBBB----
     # -CCCCCC-----
 
-    voltage_buffer = np.zeros((2, buffer_size), np.float64)
+    voltage_buffer = np.empty((2, buffer_size), np.float64)
     U_buffer = np.empty([buffer_size], np.float64)
     V_buffer = np.empty([buffer_size], np.float64)
     U_decode = np.empty([buffer_size], np.float64)
@@ -652,7 +659,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
         return ((hue + phase) % 12) < 6
 
     def pal_phase(hue):
-        if (hue >= 1 and hue <= 12):
+        if (hue >= 1 and hue <= 12) and (args.ppu == "2C07"):
             return (-(hue - 5) % 12)
         else: return hue
 
@@ -660,6 +667,13 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
 
         for luma in range(4):
             for hue in range(16):
+                voltage_buffer.fill(0)
+                U_buffer.fill(0)
+                V_buffer.fill(0)
+                U_decode.fill(0)
+                V_decode.fill(0)
+                U_comb.fill(0)
+                V_comb.fill(0)
                 # encode voltages into composite waveform
                 for wave_phase in range(buffer_size):
                     # 0 = waveform high; 1 = waveform low
@@ -672,7 +686,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                         ((emphasis & 4) and in_color_phase(0x8, wave_phase))) and
                         (hue < 0xE))
 
-                    # rows $x0 amd $xD
+                    # rows $x0 and $xD
                     if (hue == 0x0): n_wave_level = 0
                     if (hue >= 0xD): n_wave_level = 1
 
@@ -684,26 +698,27 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                     voltage_buffer[0, wave_phase] = signal_table_composite[luma_index, n_wave_level, emphasis_level]
 
                     # simulate next line by incrementing wave phase and alternating phase
-                    if (args.pal_comb_filter):
+                    if (args.delay_line_filter):
+                        wave_phase_next = (wave_phase + next_line_shift) % 12
                         # alternate color phase
-                        n_wave_level_alt = int(not in_color_phase(pal_phase(hue), wave_phase))
+                        n_wave_level_alt = int(not in_color_phase(pal_phase(hue), wave_phase_next))
 
                         emphasis_level_alt = int((
-                            ((emphasis & 1) and in_color_phase(pal_phase(0xC), wave_phase)) or
-                            ((emphasis & 2) and in_color_phase(pal_phase(0x4), wave_phase)) or
-                            ((emphasis & 4) and in_color_phase(pal_phase(0x8), wave_phase))) and
+                            ((emphasis & 1) and in_color_phase(pal_phase(0xC), wave_phase_next)) or
+                            ((emphasis & 2) and in_color_phase(pal_phase(0x4), wave_phase_next)) or
+                            ((emphasis & 4) and in_color_phase(pal_phase(0x8), wave_phase_next))) and
                             (hue < 0xE))
 
                         if (hue == 0x0 or hue >= 0xD): n_wave_level_alt = n_wave_level
 
-                        voltage_buffer[1, wave_phase] = signal_table_composite[luma_index, n_wave_level_alt, emphasis_level_alt]
+                        voltage_buffer[1, (wave_phase_next % 12)] = signal_table_composite[luma_index, n_wave_level_alt, emphasis_level_alt]
 
                 # apply analog effects
                 antiemphasis_column_chroma = (
-                    args.antiemphasis_phase_skew if ((
+                    args.antiemphasis_phase_skew if (
                         hue == 0x2 or
                         hue == 0x6 or
-                        hue == 0xA) and not args.pal_comb_filter)
+                        hue == 0xA)
                     else 0)
 
                 emphasis_row_luma = (
@@ -713,7 +728,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                         hue == 0xC)
                     else 0)
 
-                phase_skew = args.phase_skew * luma if not args.pal_comb_filter else 0
+                phase_skew = args.phase_skew * luma
 
                 # decode voltage buffer to YUV
                 # based on SMPTE 170M-2004, page 17, section A.5, equation 10
@@ -722,7 +737,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 # luma pedestal 7.5 is already accounted for during normalization
 
                 # shift blanking to 0
-                voltage_buffer -= signal_table_composite[1, 1, 0]
+                voltage_buffer -= composite_black
 
                 # convert to IRE
                 voltage_buffer *= 140
@@ -730,22 +745,21 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 # apply gain
                 voltage_buffer += args.gain
 
-                # decode Y
-                # also apply brightness and contrast
-                YUV_buffer[emphasis, luma, hue, 0] = (np.average(voltage_buffer[0]) + emphasis_row_luma) * args.contrast + args.brightness
-
                 # decode U and V
-                if (args.pal_comb_filter):
-                    # comb filter
-                    U_comb = (voltage_buffer[0] + voltage_buffer[1]) / 2
-                    V_comb = (voltage_buffer[0] - voltage_buffer[1]) / 2
-                else:
-                    U_comb = voltage_buffer[0].copy()
-                    V_comb = voltage_buffer[0].copy()
+                # reference is Video Demystified, 5th edition, p450, Figure 9.37
 
-                # highpass UV component
-                U_comb -= np.average(U_comb)
-                V_comb -= np.average(V_comb)
+                # bandpass UV component
+                voltage_bandpass = voltage_buffer.copy()
+                voltage_bandpass[0] -= np.average(voltage_bandpass[0])
+                voltage_bandpass[1] -= np.average(voltage_bandpass[1])
+
+                # comb filter
+                if (args.delay_line_filter):
+                    U_comb = (voltage_bandpass[0] + voltage_bandpass[1]) / 2
+                    V_comb = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
+                else:
+                    U_comb = voltage_bandpass[0].copy()
+                    V_comb = voltage_bandpass[0].copy()
 
                 # apply hue and saturation in decode wave
                 t = np.arange(12)
@@ -761,8 +775,16 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 U_buffer = U_comb * U_decode
                 V_buffer = V_comb * V_decode
 
+                # lowpass UV buffers
                 YUV_buffer[emphasis, luma, hue, 1] = np.average(U_buffer)
                 YUV_buffer[emphasis, luma, hue, 2] = np.average(V_buffer)
+
+                # decode Y
+                # also apply brightness and contrast
+                if (args.delay_line_filter):
+                    YUV_buffer[emphasis, luma, hue, 0] = (np.average(voltage_buffer[0] - voltage_bandpass[0]) + emphasis_row_luma) * args.contrast + args.brightness
+                else:
+                    YUV_buffer[emphasis, luma, hue, 0] = (np.average(voltage_buffer[0]) + emphasis_row_luma) * args.contrast + args.brightness
 
                 # visualize chroma decoding
                 if (args.debug):
@@ -1020,6 +1042,64 @@ def main(argv=None):
     import colour.models
     import colour.plotting.diagrams
 
+    # colour.RGB_Colourspace helper functions
+    def colorspace_equality(s_colorspace, t_colorspace):
+        equal = True
+        equal = equal and s_colorspace.name == t_colorspace.name
+        equal = equal and np.equal(s_colorspace.primaries, t_colorspace.primaries).all()
+        equal = equal and np.equal(s_colorspace.whitepoint, t_colorspace.whitepoint).all()
+        equal = equal and s_colorspace.whitepoint_name == t_colorspace.whitepoint_name
+        equal = equal and np.equal(s_colorspace.matrix_RGB_to_XYZ, t_colorspace.matrix_RGB_to_XYZ).all()
+        equal = equal and np.equal(s_colorspace.matrix_XYZ_to_RGB, t_colorspace.matrix_XYZ_to_RGB).all()
+        equal = equal and s_colorspace.cctf_decoding_name == t_colorspace.cctf_encoding_name
+        return equal
+
+    def init_colorspace(colorspace, primaries_r, primaries_g, primaries_b, primaries_w, opto_electronic=None, electro_optic=None):
+        # display color profile colorspace
+        x_colorspace = colour.RGB_Colourspace(
+            colour.RGB_COLOURSPACES[colorspace].name,
+            colour.RGB_COLOURSPACES[colorspace].primaries,
+            colour.RGB_COLOURSPACES[colorspace].whitepoint,
+            colour.RGB_COLOURSPACES[colorspace].whitepoint_name)
+
+        if (primaries_r is not None
+            and primaries_g is not None
+            and primaries_b is not None):
+            x_colorspace.name = "custom primaries"
+            x_colorspace.primaries = np.array([
+                primaries_r,
+                primaries_g,
+                primaries_b
+            ])
+        else:
+            x_colorspace.name = colour.RGB_COLOURSPACES[colorspace].name
+            x_colorspace.primaries = colour.RGB_COLOURSPACES[colorspace].primaries
+
+        if (primaries_w is not None):
+            x_colorspace.whitepoint = primaries_w
+            x_colorspace.whitepoint_name = "custom whitepoint"
+        else:
+            x_colorspace.whitepoint_name = colour.RGB_COLOURSPACES[colorspace].whitepoint_name
+            x_colorspace.whitepoint = colour.RGB_COLOURSPACES[colorspace].whitepoint
+        
+        if (opto_electronic is not None):
+            x_colorspace.cctf_encoding = lambda x: colour.cctf_encoding(x, function=args.opto_electronic)
+            x_colorspace.cctf_encoding_name = opto_electronic
+        else:
+            x_colorspace.cctf_encoding = colour.RGB_COLOURSPACES[colorspace].cctf_encoding
+            x_colorspace.cctf_encoding_name = colorspace
+        
+        if (electro_optic is not None):
+            x_colorspace.cctf_decoding = lambda x: colour.cctf_decoding(x, function=args.electro_optic)
+            x_colorspace.cctf_decoding_name = electro_optic
+        else:
+            x_colorspace.cctf_decoding = colour.RGB_COLOURSPACES[colorspace].cctf_decoding
+            x_colorspace.cctf_decoding_name = colorspace
+
+        return x_colorspace
+
+
+
     # special thanks to NewRisingSun for teaching me how chromatic adaptations work!
     # special thanks to _aitchFactor for pointing out that colour-science has
     # chromatic adaptation functions!
@@ -1027,56 +1107,22 @@ def main(argv=None):
     # suppress warnings for colour-science
     with colour.utilities.suppress_warnings(*[True] * 4):
         # reference color profile colorspace
-        s_colorspace = colour.RGB_Colourspace(
-            colour.RGB_COLOURSPACES[args.reference_colorspace].name,
-            colour.RGB_COLOURSPACES[args.reference_colorspace].primaries,
-            colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint)
+        electro_optic = args.electro_optic
+        opto_electronic = args.opto_electronic
 
-        if (args.reference_primaries_r is not None
-            and args.reference_primaries_g is not None
-            and args.reference_primaries_b is not None):
-            s_colorspace.name = "custom primaries"
-            s_colorspace.primaries = np.array([
-                args.reference_primaries_r,
-                args.reference_primaries_g,
-                args.reference_primaries_b
-            ])
-        else:
-            s_colorspace.name = colour.RGB_COLOURSPACES[args.reference_colorspace].name
-            s_colorspace.primaries = colour.RGB_COLOURSPACES[args.reference_colorspace].primaries
-
-        if (args.reference_primaries_w is not None):
-            s_colorspace.whitepoint = args.reference_primaries_w
-            s_colorspace.whitepoint_name = "custom whitepoint"
-        else:
-            s_colorspace.whitepoint_name = colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint_name
-            s_colorspace.whitepoint = colour.RGB_COLOURSPACES[args.reference_colorspace].whitepoint
-
-        # display color profile colorspace
-        t_colorspace = colour.RGB_Colourspace(
-            colour.RGB_COLOURSPACES[args.display_colorspace].name,
-            colour.RGB_COLOURSPACES[args.display_colorspace].primaries,
-            colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint)
-
-        if (args.display_primaries_r is not None
-            and args.display_primaries_g is not None
-            and args.display_primaries_b is not None):
-            t_colorspace.name = "custom primaries"
-            t_colorspace.primaries = np.array([
-                args.display_primaries_r,
-                args.display_primaries_g,
-                args.display_primaries_b
-            ])
-        else:
-            t_colorspace.name = colour.RGB_COLOURSPACES[args.display_colorspace].name
-            t_colorspace.primaries = colour.RGB_COLOURSPACES[args.display_colorspace].primaries
-
-        if (args.display_primaries_w is not None):
-            t_colorspace.whitepoint = args.display_primaries_w
-            t_colorspace.whitepoint_name = "custom whitepoint"
-        else:
-            t_colorspace.whitepoint_name = colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint_name
-            t_colorspace.whitepoint = colour.RGB_COLOURSPACES[args.display_colorspace].whitepoint
+        s_colorspace = init_colorspace(args.reference_colorspace,
+            args.reference_primaries_r,
+            args.reference_primaries_g,
+            args.reference_primaries_b,
+            args.reference_primaries_w,
+            electro_optic=electro_optic)
+    
+        t_colorspace = init_colorspace(args.display_colorspace,
+            args.display_primaries_r,
+            args.display_primaries_g,
+            args.display_primaries_b,
+            args.display_primaries_w,
+            opto_electronic=opto_electronic)
 
         # decoded RGB buffer
         # has to be zero'd out for the normalize function to work
@@ -1104,7 +1150,7 @@ def main(argv=None):
                 if (args.white_point is not None):
                     signal_white_point = args.white_point
                 else:
-                    signal_white_point = 140 * (signal_table_composite[3, 0, 0] - signal_table_composite[1, 1, 0])
+                    signal_white_point = 140 * (composite_white - composite_black)
 
                 # we use RGB_buffer[] as a temporary buffer for YUV
                 RGB_buffer = pixel_codec_composite(RGB_buffer, args, signal_black_point, signal_white_point)
@@ -1140,14 +1186,16 @@ def main(argv=None):
 
         # convert RGB to display output
         if (args.gamma):
-            # convert linear signal to linear light, if permitted
+            # electro-optic transfer via gamma function
             if (not args.electro_optic_disable):
                 RGB_buffer = colour.gamma_function(RGB_buffer, 2.2)
                 RGB_uncorrected = colour.gamma_function(RGB_uncorrected, 2.2)
 
             # transform color primaries
-            if (t_colorspace != s_colorspace):
+            if not colorspace_equality(s_colorspace, t_colorspace):
+                if (args.debug): print("gamma colorspace transform!")
                 if (args.inverse_chromatic_transform):
+                    if (args.debug): print("inverse transform!")
                     RGB_buffer = colour.RGB_to_RGB(
                         RGB_buffer,
                         t_colorspace,
@@ -1160,36 +1208,32 @@ def main(argv=None):
                         t_colorspace,
                         chromatic_adaptation_transform=args.chromatic_adaptation_transform)
 
-            # convert linear light to linear signal, if permitted
+            # opto-electronic transfer via gamma function
             if (not args.opto_electronic_disable):
                 RGB_buffer = colour.gamma_function(RGB_buffer, 1/args.gamma)
                 RGB_uncorrected = colour.gamma_function(RGB_uncorrected, 1/args.gamma)
-        elif ((args.electro_optic != args.opto_electronic) or (t_colorspace != s_colorspace)
-            or (args.electro_optic_disable) or (args.opto_electronic_disable)):
-            # convert linear signal to linear light, if permitted
-            if (not args.electro_optic_disable):
-                RGB_buffer = colour.cctf_decoding(RGB_buffer, function=args.electro_optic)
-                RGB_uncorrected = colour.cctf_decoding(RGB_uncorrected, function=args.electro_optic)
 
-            # transform color primaries
-            if (t_colorspace != s_colorspace):
+        else:
+            if not colorspace_equality(s_colorspace, t_colorspace):
+                # perform transform only when colorspaces actually differ
+                if (args.debug): print("colorspace transform!")
                 if (args.inverse_chromatic_transform):
+                    if (args.debug): print("inverse transform!")
                     RGB_buffer = colour.RGB_to_RGB(
                         RGB_buffer,
                         t_colorspace,
                         s_colorspace,
-                        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
+                        chromatic_adaptation_transform=args.chromatic_adaptation_transform,
+                        apply_cctf_decoding=(not args.electro_optic_disable),
+                        apply_cctf_encoding=(not args.opto_electronic_disable))
                 else:
                     RGB_buffer = colour.RGB_to_RGB(
                         RGB_buffer,
                         s_colorspace,
                         t_colorspace,
-                        chromatic_adaptation_transform=args.chromatic_adaptation_transform)
-
-            # convert linear light to linear signal, if permitted
-            if (not args.opto_electronic_disable):
-                RGB_buffer = colour.cctf_encoding(RGB_buffer, function=args.opto_electronic)
-                RGB_uncorrected = colour.cctf_encoding(RGB_uncorrected, function=args.opto_electronic)
+                        chromatic_adaptation_transform=args.chromatic_adaptation_transform,
+                        apply_cctf_decoding=(not args.electro_optic_disable),
+                        apply_cctf_encoding=(not args.opto_electronic_disable))
 
         # clip again, the transform may produce values beyond 0-1
         normalize_RGB(RGB_buffer, args)
