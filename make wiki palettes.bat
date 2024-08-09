@@ -1,6 +1,13 @@
-palgen_persune.py --skip-plot -phs -5.0 -e -o docs/NESDev/2C02G_wiki -f ".txt MediaWiki"
-palgen_persune.py --skip-plot -phs -5.0 -e -o docs/NESDev/2C02G_wiki
-palgen_persune.py --skip-plot -ppu "2C07" -e -o docs/NESDev/2C07_wiki -f ".txt MediaWiki"
-palgen_persune.py --skip-plot -ppu "2C07" -e -o docs/NESDev/2C07_wiki
-palgen_persune.py --skip-plot -ppu "2C03" -e -o docs/NESDev/2C03_wiki -f ".txt MediaWiki"
-palgen_persune.py --skip-plot -ppu "2C03" -e -o docs/NESDev/2C03_wiki
+palgen_persune.py --skip-plot -cld -phs -5.0 -e -o docs/NESDev/2C02G_wiki -f ".txt MediaWiki"
+palgen_persune.py --skip-plot -cld -e -o docs/NESDev/2C02G_wiki
+
+REM palgen_persune.py --skip-plot -cld -ppu "2C07" -e -o docs/NESDev/2C07_wiki -f ".txt MediaWiki"
+REM palgen_persune.py --skip-plot -cld -ppu "2C07" -e -o docs/NESDev/2C07_wiki
+
+palgen_persune.py --skip-plot -cld -ppu "2C07" -phs -5.0 --delay-line-filter -e -o docs/NESDev/2C07_wiki -f ".txt MediaWiki"
+palgen_persune.py --skip-plot -cld -ppu "2C07" -e -o docs/NESDev/2C07_wiki
+
+palgen_persune.py --skip-plot -cld -hue 15 -e -o docs/NESDev/2C02-2C07_wiki
+
+palgen_persune.py --skip-plot -cld -ppu "2C03" -e -o docs/NESDev/2C03_wiki -f ".txt MediaWiki"
+palgen_persune.py --skip-plot -cld -ppu "2C03" -e -o docs/NESDev/2C03_wiki

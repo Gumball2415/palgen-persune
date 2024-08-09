@@ -33,13 +33,14 @@ usage: palgen_persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                          [-con CONTRAST] [-hue HUE] [-sat SATURATION]
                          [-blp BLACK_POINT] [-whp WHITE_POINT] [-gai GAIN]
                          [-gam GAMMA] [--delay-line-filter]
-                         [-axs {None,CXA2025AS_JP,CXA2025AS_US}]
+                         [-axs {None,CXA2025AS_JP,CXA2025AS_US}] [-bsd] [-spg]
                          [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
                          [-ela EMPHASIS_LUMA_ATTENUATION]
                          [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
                          [-cat CHROMATIC_ADAPTATION_TRANSFORM] [-ict]
                          [-oetf OPTO_ELECTRONIC] [-eotf ELECTRO_OPTIC]
                          [--opto-electronic-disable] [--electro-optic-disable]
+                         [-cld]
                          [-rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R]
                          [-rpg REFERENCE_PRIMARIES_G REFERENCE_PRIMARIES_G]
                          [-rpb REFERENCE_PRIMARIES_B REFERENCE_PRIMARIES_B]
@@ -97,6 +98,12 @@ options:
   -axs {None,CXA2025AS_JP,CXA2025AS_US}, --axis-shift {None,CXA2025AS_JP,CXA2025AS_US}
                         axis adjustment for R-Y and G-Y like Sony CXA2025AS,
                         default = None
+  -bsd, --burst-saturation-disable
+                        disable using colorburst amplitude as saturation
+                        reference
+  -spg, --sinusoidal-peak-generation
+                        generate sine waves in composite encoding instead of
+                        square waves
   -phs PHASE_SKEW, --phase-skew PHASE_SKEW
                         differential phase distortion for composite PPUs, in
                         degrees, default = 0.0
@@ -108,7 +115,7 @@ options:
                         composite PPUs, in voltage units, default = 0.0
   -rfc REFERENCE_COLORSPACE, --reference-colorspace REFERENCE_COLORSPACE
                         use colour.RGB_COLOURSPACES reference colorspace,
-                        default = "NTSC (1987)"
+                        default = "SMPTE C"
   -dsc DISPLAY_COLORSPACE, --display-colorspace DISPLAY_COLORSPACE
                         use colour.RGB_COLOURSPACES display colorspace,
                         default = "sRGB"
@@ -129,6 +136,8 @@ options:
                         disable converting linear light to linear signal
   --electro-optic-disable
                         disable converting linear signal to linear light
+  -cld, --colorimetry-disable
+                        disable all colorimetry functions
   -rpr REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R, --reference-primaries-r REFERENCE_PRIMARIES_R REFERENCE_PRIMARIES_R
                         set custom reference color primary R, in CIE xy
                         chromaticity coordinates
@@ -154,7 +163,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.13.0
+version 0.14.0
 ```
 
 ## License
