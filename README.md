@@ -71,7 +71,7 @@ options:
   -p, --phase-QAM       view QAM demodulation
   -n {scale,scale clip negative}, --normalize {scale,scale clip negative}
                         normalize all colors within gamut by scaling values
-  -ppu {2C02,2C03,2C04-0000,2C04-0001,2C04-0002,2C04-0003,2C04-0004,2C05-99,2C07}
+  -ppu {2C02,2C03,2C04-0000,2C04-0001,2C04-0002,2C04-0003,2C04-0004,2C05-99,2C07}, --ppu {2C02,2C03,2C04-0000,2C04-0001,2C04-0002,2C04-0003,2C04-0004,2C05-99,2C07}
                         PPU chip used for generating colors. default = 2C02
   -c {darken,desaturate}, --clip {darken,desaturate}
                         clips out-of-gamut RGB colors
@@ -163,7 +163,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.14.0
+version 0.15.0
 ```
 
 ## License
@@ -177,7 +177,8 @@ Copyright (C) Persune 2024.
 Special thanks to:
 - NewRisingSun
 - lidnariq
-- _aitchFactor
+- PinoBatch
 - jekuthiel
+- _aitchFactor
 
 This would have not been possible without their help!

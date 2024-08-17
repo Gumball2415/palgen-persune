@@ -20,7 +20,7 @@ import os, sys
 import argparse
 import numpy as np
 
-VERSION = "0.14.0"
+VERSION = "0.15.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -96,6 +96,7 @@ def parse_argv(argv):
         ])
     parser.add_argument(
         "-ppu",
+        "--ppu",
         type=str,
         help="PPU chip used for generating colors. default = 2C02",
         choices=[
@@ -179,6 +180,7 @@ def parse_argv(argv):
             "None",
             "CXA2025AS_JP",
             "CXA2025AS_US",
+            "bisqwit_NTSC_1953",
         ],
         default = "None")
     parser.add_argument(
@@ -316,6 +318,15 @@ def parse_argv(argv):
 
     return parser.parse_args(argv[1:])
 
+
+# matrix function to convert YUV to YIQ and vice-versa
+IQ_tilt = np.radians(33)
+YUV_YIQ = np.array([
+    [1, 0, 0],
+    [0, np.cos(IQ_tilt), np.sin(IQ_tilt)],
+    [0, -np.sin(IQ_tilt), np.cos(IQ_tilt)]
+], np.float64)
+
 # B-Y and R-Y reduction factors
 # S170m-2004.pdf: Composite Analog Video Signal NTSC for Studio Applications. Page 16.
 BY_rf = 0.492111
@@ -328,6 +339,24 @@ RGB_to_YUV = np.array([
     [-0.299*BY_rf, -0.587*BY_rf,  0.886*BY_rf],
     [ 0.701*RY_rf, -0.587*RY_rf, -0.114*RY_rf]
 ], np.float64)
+
+# derived from https://forums.nesdev.org/viewtopic.php?p=172817#p172817
+# coefficients shifted up by 6 decimals
+YIQ_to_RGB_bisqwit = np.array([
+    [1,  1.994681  ,  0.9915742],
+    [1,  0.09151351, -0.6334805],
+    [1, -1.012984  ,  1.667217 ]
+], np.float64)
+
+RGB_to_YIQ_bisqwit = np.linalg.inv(YIQ_to_RGB_bisqwit)
+
+RGB_to_YUV_bisqwit = np.array([
+    RGB_to_YIQ_bisqwit[0,:],
+    ((RGB_to_YIQ_bisqwit[2,:]*np.sin(IQ_tilt)) - (RGB_to_YIQ_bisqwit[1,:]*np.cos(IQ_tilt))),
+    ((RGB_to_YIQ_bisqwit[1,:]*np.sin(IQ_tilt)) + (RGB_to_YIQ_bisqwit[2,:]*np.cos(IQ_tilt)))
+], np.float64)
+
+YUV_to_RGB_bisqwit = np.linalg.inv(RGB_to_YUV_bisqwit)
 
 # thanks, NewRisingSun!
 # Sony CXA2025AS axis offsets from the datasheet
@@ -402,8 +431,13 @@ def palette_plot(RGB_buffer,
     import matplotlib.gridspec as gridspec
     import colour.plotting.diagrams
 
-    RGB_sub = RGB_buffer
-    RGB_sub_raw = RGB_uncorrected
+    # if emphasis enabled, reshape to single emphasis permutation
+    if (args.emphasis):
+        RGB_sub = RGB_buffer.reshape(8,4,16,3)[emphasis]
+        RGB_sub_raw = RGB_uncorrected.reshape(8,4,16,3)[emphasis]
+    else:
+        RGB_sub = RGB_buffer
+        RGB_sub_raw = RGB_uncorrected
 
     fig = plt.figure(tight_layout=True, dpi=96)
     gs = gridspec.GridSpec(2, 2)
@@ -665,18 +699,18 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     saturation_correction = 2 * colorburst_amp_correction
 
     # signal buffers for decoding
-    # 111111------
-    # 22222------2
-    # 3333------33
-    # 444------444
-    # 55------5555
-    # 6------66666
-    # ------777777
-    # -----888888-
-    # ----999999--
-    # ---AAAAAA---
-    # --BBBBBB----
-    # -CCCCCC-----
+    # 11111------1
+    # 2222------22
+    # 333------333
+    # 44------4444
+    # 5------55555
+    # ------666666
+    # -----777777-
+    # ----888888--
+    # ---999999---
+    # --AAAAAA----
+    # -BBBBBB-----
+    # CCCCCC------
 
     voltage_buffer = np.empty((2, buffer_size), np.float64)
     U_buffer = np.empty([buffer_size], np.float64)
@@ -686,28 +720,31 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     U_comb = np.empty([buffer_size], np.float64)
     V_comb = np.empty([buffer_size], np.float64)
 
-    def in_color_phase(hue, phase):
-        return ((hue + phase) % 12) < 6
-
-    def pal_phase(hue, enable=False):
-        if (hue >= 1 and hue <= 12) and (args.ppu == "2C07") and enable:
-            return (-(hue - 5) % 12)
-        else: return hue
-
     def encode_composite(emphasis, luma, hue, wave_phase, sinusoidal_peak_generation, alternate_line=False):
+        # 2C07 phase alternation
+        def pal_phase(hue):
+            if (hue >= 1 and hue <= 12) and (args.ppu == "2C07") and alternate_line:
+                return (-(hue - 5) % 12)
+            else: return hue
+
+        # waveform generation
+        def in_color_phase(hue, phase):
+            return ((pal_phase(hue) + phase) % 12) < 6
+
         #rows $xE-$xF
         luma_index = luma;
         if (hue >= 0xE):
             luma_index = 0x1
 
         # 0 = waveform high; 1 = waveform low
-        n_wave_level = int(not in_color_phase(pal_phase(hue, alternate_line), wave_phase))
+        n_wave_level = int(not in_color_phase(hue, wave_phase))
         # 1 = emphasis activate
-        emphasis_level = int((
-            ((emphasis & 1) and in_color_phase(pal_phase(0xC, alternate_line), wave_phase)) or
-            ((emphasis & 2) and in_color_phase(pal_phase(0x4, alternate_line), wave_phase)) or
-            ((emphasis & 4) and in_color_phase(pal_phase(0x8, alternate_line), wave_phase))) and
-            (hue < 0xE))
+        emphasis_level = int(
+           (((emphasis & 1) and in_color_phase(0xC, wave_phase)) or
+            ((emphasis & 2) and in_color_phase(0x4, wave_phase)) or
+            ((emphasis & 4) and in_color_phase(0x8, wave_phase))) and
+            (hue < 0xE)
+        )
 
         # generate sinusoidal waveforms with matching p-p amplitudes
         if (sinusoidal_peak_generation):
@@ -735,6 +772,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
         for luma in range(4):
             for hue in range(16):
 
+                # initialize buffers to prevent error propagation
                 voltage_buffer.fill(0)
                 U_buffer.fill(0)
                 V_buffer.fill(0)
@@ -805,13 +843,14 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
 
                 # subcarrier generation is 180 degrees offset
                 # due to the way the waveform is encoded, the hue is off by an additional 1/2 of a sample
-
+                # if the subcarrier moves forward in angle, the resulting hue goes backwards
+                # hue argument is therefore inverse here
                 U_decode = np.sin(2 * np.pi / 12 * (t - 1 - colorburst_phase - 0.5) +
-                    np.radians(args.hue + antiemphasis_column_chroma - phase_skew)
+                    np.radians(antiemphasis_column_chroma - phase_skew - args.hue)
                 ) * args.saturation * saturation_correction
 
                 V_decode = np.cos(2 * np.pi / 12 * (t - 1 - colorburst_phase - 0.5) +
-                    np.radians(args.hue + antiemphasis_column_chroma - phase_skew)
+                    np.radians(antiemphasis_column_chroma - phase_skew - args.hue)
                 ) * args.saturation * saturation_correction
 
                 U_buffer = U_comb * U_decode
@@ -867,18 +906,11 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
                 0x777,0x567,0x657,0x757,0x747,0x755,0x764,0x772,0x773,0x572,0x473,0x276,0x467,0x000,0x000,0x000
             ], np.uint16)
 
-    IQ_tilt = np.radians(33)
 
     RGB_to_YIQ = np.array([
         RGB_to_YUV[0,:],
         ((RGB_to_YUV[1,:] * np.cos(IQ_tilt)) - (RGB_to_YUV[2,:]*np.sin(IQ_tilt))),
         ((RGB_to_YUV[1,:] * np.sin(IQ_tilt)) + (RGB_to_YUV[2,:]*np.cos(IQ_tilt)))
-    ], np.float64)
-
-    YUV_to_YIQ = np.array([
-        [1, 0, 0],
-        [0, np.cos(IQ_tilt), np.sin(IQ_tilt)],
-        [0, -np.sin(IQ_tilt), np.cos(IQ_tilt)]
     ], np.float64)
 
     def rgb_oct_triplet_to_float_array(signal_triplet, emphasis):
@@ -963,7 +995,7 @@ def pixel_codec_rgb(YUV_buffer, args=None, signal_black_point=None, signal_white
                 YUV_buffer[emphasis, luma, hue, 2] *= args.saturation
 
                 # convert to YUV for later decoding
-                YUV_buffer[emphasis, luma, hue] = np.matmul(YUV_to_YIQ, YUV_buffer[emphasis, luma, hue])
+                YUV_buffer[emphasis, luma, hue] = np.matmul(YUV_YIQ, YUV_buffer[emphasis, luma, hue])
 
         if not (args.emphasis):
             # clip unused emphasis space
@@ -1152,12 +1184,20 @@ def main(argv=None):
         electro_optic = args.electro_optic
         opto_electronic = args.opto_electronic
 
-        s_colorspace = init_colorspace(args.reference_colorspace,
-            args.reference_primaries_r,
-            args.reference_primaries_g,
-            args.reference_primaries_b,
-            args.reference_primaries_w,
-            electro_optic=electro_optic)
+        if (args.colorimetry_disable):
+            s_colorspace = init_colorspace(args.display_colorspace,
+                args.display_primaries_r,
+                args.display_primaries_g,
+                args.display_primaries_b,
+                args.display_primaries_w,
+                electro_optic=opto_electronic)
+        else:
+            s_colorspace = init_colorspace(args.reference_colorspace,
+                args.reference_primaries_r,
+                args.reference_primaries_g,
+                args.reference_primaries_b,
+                args.reference_primaries_w,
+                electro_optic=electro_optic)
     
         t_colorspace = init_colorspace(args.display_colorspace,
             args.display_primaries_r,
@@ -1209,7 +1249,8 @@ def main(argv=None):
         YUV_to_RGB_matrix = {
             "None": YUV_to_RGB,
             "CXA2025AS_JP": YUV_to_RGB_CXA_JP,
-            "CXA2025AS_US": YUV_to_RGB_CXA_US
+            "CXA2025AS_US": YUV_to_RGB_CXA_US,
+            "bisqwit_NTSC_1953": YUV_to_RGB_bisqwit
         }
 
         RGB_buffer = np.einsum('ij,klj->kli', YUV_to_RGB_matrix[args.axis_shift], RGB_buffer, dtype=np.float64)
@@ -1307,7 +1348,7 @@ def main(argv=None):
 
         if (args.render_img is not None):
             for emphasis in range(8):
-                palette_plot(RGB_buffer.reshape(8,4,16,3)[emphasis], RGB_uncorrected.reshape(8,4,16,3)[emphasis], emphasis, False, True, True, args, s_colorspace, t_colorspace)
+                palette_plot(RGB_buffer, RGB_uncorrected, emphasis, False, True, True, args, s_colorspace, t_colorspace)
                 if not (args.emphasis):
                     break
 
