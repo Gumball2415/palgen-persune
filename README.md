@@ -17,9 +17,9 @@ See `requirements.txt` for more details.
 
 ### This script requires:
 
-- `colour-science == 0.4.4`
+- `colour-science == 0.4.6`
 	- for linear light, and color adaptation functions. 
-- `matplotlib == 3.8.2`
+- `matplotlib == 3.9.3`
 	- for graphs and `colour-science` CIE 1931 colorimetry diagrams.
 
 ## Usage
@@ -33,8 +33,9 @@ usage: palgen_persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                          [-con CONTRAST] [-hue HUE] [-sat SATURATION]
                          [-blp BLACK_POINT] [-whp WHITE_POINT] [-gai GAIN]
                          [-gam GAMMA] [--delay-line-filter]
-                         [-axs {None,CXA2025AS_JP,CXA2025AS_US}] [-bsd] [-spg]
-                         [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
+                         [-axs {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}]
+                         [-bsd] [-spg] [-phs PHASE_SKEW]
+                         [-aps ANTIEMPHASIS_PHASE_SKEW]
                          [-ela EMPHASIS_LUMA_ATTENUATION]
                          [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
                          [-cat CHROMATIC_ADAPTATION_TRANSFORM] [-ict]
@@ -95,7 +96,7 @@ options:
                         to be gamma 2.2.
   --delay-line-filter   use 1D delay line comb filter decoding instead of
                         single-line decoding
-  -axs {None,CXA2025AS_JP,CXA2025AS_US}, --axis-shift {None,CXA2025AS_JP,CXA2025AS_US}
+  -axs {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}, --axis-shift {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}
                         axis adjustment for R-Y and G-Y like Sony CXA2025AS,
                         default = None
   -bsd, --burst-saturation-disable
@@ -163,7 +164,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.15.0
+version 0.16.0
 ```
 
 ## License

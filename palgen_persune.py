@@ -1,4 +1,4 @@
-# palgen NES
+# palette generator NES
 # Copyright (C) 2024 Persune
 # inspired by PalGen, Copyright (C) 2018 DragWx <https://github.com/DragWx>
 # testing out the concepts from https://www.nesdev.org/wiki/NTSC_video#Composite_decoding
@@ -19,8 +19,9 @@
 import os, sys
 import argparse
 import numpy as np
+import ppu_composite as ppu
 
-VERSION = "0.15.0"
+VERSION = "0.16.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -384,34 +385,8 @@ YUV_to_RGB_CXA_US = np.array([
     YUV_to_RGB[2,:]
 ], np.float64)
 
-# signal LUTs
-# voltage highs and lows
-# from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
-# signal[4][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
-signal_table_composite = np.array([
-    [
-        [ 0.616, 0.500 ],
-        [ 0.228, 0.192 ]
-    ],
-    [
-        [ 0.840, 0.676 ],
-        [ 0.312, 0.256 ]
-    ],
-    [
-        [ 1.100, 0.896 ],
-        [ 0.552, 0.448 ]
-    ],
-    [
-        [ 1.100, 0.896 ],
-        [ 0.880, 0.712 ]
-    ]
-], np.float64)
-
-# colorburst[2] colorburst low, colorburst high
-colorburst_table_composite = np.array([0.148, 0.524], np.float64)
-
-composite_black = signal_table_composite[1, 1, 0]
-composite_white = signal_table_composite[3, 0, 0]
+composite_black = ppu.signal_table_composite[1, 1, 0]
+composite_white = ppu.signal_table_composite[3, 0, 0]
 
 # figure plotting for palette preview
 # TODO: interactivity
@@ -665,12 +640,12 @@ def normalize_RGB(RGB_buffer, args=None):
     np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
 
 def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal_white_point=None):
-    colorburst_phase = 0
-    next_line_shift = 0
 
     # used for image sequence plotting
     sequence_counter = 0
 
+    colorburst_phase = 0
+    next_line_shift = 0
     if (args.ppu == "2C07"):
         # $x7 == -U - 45 degrees
         # will flip to -U + 45 in pal_phase()
@@ -685,7 +660,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     color_gen_clock_factor = 2
     buffer_size = int(colorburst_factor * color_gen_clock_factor)
 
-    colorburst_amplitude = 140 * (colorburst_table_composite[1] - colorburst_table_composite[0]) # in IRE
+    colorburst_amplitude = 140 * (ppu.colorburst_table_composite[1] - ppu.colorburst_table_composite[0]) # in IRE
     
     # SMPTE 170M-2004, page 5, section 8.2
     # value of 40 IRE based on colorburst p-p amplitude defined in
@@ -720,54 +695,6 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     U_comb = np.empty([buffer_size], np.float64)
     V_comb = np.empty([buffer_size], np.float64)
 
-    def encode_composite(emphasis, luma, hue, wave_phase, sinusoidal_peak_generation, alternate_line=False):
-        # 2C07 phase alternation
-        def pal_phase(hue):
-            if (hue >= 1 and hue <= 12) and (args.ppu == "2C07") and alternate_line:
-                return (-(hue - 5) % 12)
-            else: return hue
-
-        # waveform generation
-        def in_color_phase(hue, phase):
-            return ((pal_phase(hue) + phase) % 12) < 6
-
-        #rows $xE-$xF
-        luma_index = luma;
-        if (hue >= 0xE):
-            luma_index = 0x1
-
-        # 0 = waveform high; 1 = waveform low
-        n_wave_level = int(not in_color_phase(hue, wave_phase))
-        # 1 = emphasis activate
-        emphasis_level = int(
-           (((emphasis & 1) and in_color_phase(0xC, wave_phase)) or
-            ((emphasis & 2) and in_color_phase(0x4, wave_phase)) or
-            ((emphasis & 4) and in_color_phase(0x8, wave_phase))) and
-            (hue < 0xE)
-        )
-
-        # generate sinusoidal waveforms with matching p-p amplitudes
-        if (sinusoidal_peak_generation):
-            wave_amp = (signal_table_composite[luma_index, 0, emphasis_level] - signal_table_composite[luma_index, 1, emphasis_level]) / 2
-
-            # rows $x0 and $xD
-            luma_offset = (signal_table_composite[luma_index, 1, emphasis_level] + signal_table_composite[luma_index, 0, emphasis_level]) / 2
-            if (hue == 0x00):
-                wave_amp = 0
-                luma_offset = signal_table_composite[luma_index, 0, emphasis_level]
-            
-            if (hue >= 0x0D):
-                wave_amp = 0
-                luma_offset = signal_table_composite[luma_index, 1, emphasis_level]
-
-            return luma_offset + (np.sin((2 * np.pi * (hue+0.5)/12) + (2 * np.pi / 12 * (wave_phase))) * wave_amp)
-
-        # rows $x0 and $xD
-        if (hue == 0x0): n_wave_level = 0
-        if (hue >= 0xD): n_wave_level = 1
-
-        return signal_table_composite[luma_index, n_wave_level, emphasis_level]
-
     for emphasis in range(8):
         for luma in range(4):
             for hue in range(16):
@@ -782,13 +709,11 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 V_comb.fill(0)
 
                 # encode voltages into composite waveform
-                for wave_phase in range(buffer_size):
-                    voltage_buffer[0, wave_phase] = encode_composite(emphasis, luma, hue, wave_phase, args.sinusoidal_peak_generation,)
+                voltage_buffer[0] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, 0, args.sinusoidal_peak_generation)
 
-                    # simulate next line by incrementing wave phase and alternating phase
-                    if (args.delay_line_filter):
-                        wave_phase_next = (wave_phase + next_line_shift) % 12
-                        voltage_buffer[1, wave_phase_next] = encode_composite(emphasis, luma, hue, wave_phase_next, args.sinusoidal_peak_generation, alternate_line=True)
+                # simulate next line by incrementing wave phase and alternating phase
+                if (args.delay_line_filter):
+                    voltage_buffer[1] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, next_line_shift, args.sinusoidal_peak_generation, alternate_line=True)
 
                 # apply analog effects
                 antiemphasis_column_chroma = (
@@ -823,18 +748,26 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 voltage_buffer += args.gain
 
                 # decode U and V
-                # reference is Video Demystified, 5th edition, p450, Figure 9.37
 
                 # bandpass UV component
                 voltage_bandpass = voltage_buffer.copy()
-                voltage_bandpass[0] -= np.average(voltage_bandpass[0])
-                voltage_bandpass[1] -= np.average(voltage_bandpass[1])
 
                 # comb filter
                 if (args.delay_line_filter):
-                    U_comb = (voltage_bandpass[0] + voltage_bandpass[1]) / 2
-                    V_comb = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
+                    # bandpass and combine lines in specific way to retrieve U and V
+                    # reference is Video Demystified, 5th edition, p450, Figure 9.37
+                    if (args.ppu == "2C07"):
+                        voltage_bandpass[0] -= np.average(voltage_bandpass[0])
+                        voltage_bandpass[1] -= np.average(voltage_bandpass[1])
+                        U_comb = (voltage_bandpass[0] + voltage_bandpass[1]) / 2
+                        V_comb = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
+                    # regular 1D comb bandpasses chroma
+                    else:
+                        U_comb = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
+                        V_comb = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
                 else:
+                    # no comb filter, bandpass only first line
+                    voltage_bandpass[0] -= np.average(voltage_bandpass[0])
                     U_comb = voltage_bandpass[0].copy()
                     V_comb = voltage_bandpass[0].copy()
 
@@ -1358,74 +1291,75 @@ if __name__=='__main__':
     main(sys.argv)
 
 # debugging, don't mind this
-def NES_SMPTE_plot(RGB_uncorrected, emphasis, args=None):
-    import matplotlib.pyplot as plt
-    if (args.skip_plot):
-        return
-    if not args.emphasis:
-        RGB_sub_raw = RGB_uncorrected
-    else:
-        RGB_sub_raw = np.split(RGB_uncorrected, 8, 0)[emphasis]
+# def NES_SMPTE_plot(RGB_uncorrected, emphasis, args=None):
+#     import matplotlib.pyplot as plt
+#     from matplotlib.gridspec import GridSpec
+#     if (args.skip_plot):
+#         return
+#     if not args.emphasis:
+#         RGB_sub_raw = RGB_uncorrected
+#     else:
+#         RGB_sub_raw = np.split(RGB_uncorrected, 8, 0)[emphasis]
 
-    print(RGB_sub_raw.shape)
-    RGB_sub_raw_SMPTE = np.zeros([7,3], np.float64)
+#     print(RGB_sub_raw.shape)
+#     RGB_sub_raw_SMPTE = np.zeros([7,3], np.float64)
 
-    RGB_SMPTE = np.array([
-        [0.75, 0.75, 0.75],
-        [0.75, 0.75, 0],
-        [0, 0.75, 0.75],
-        [0, 0.75, 0],
-        [0.75, 0, 0.75],
-        [0.75, 0, 0],
-        [0, 0, 0.75],
-    ], np.float64)
+#     RGB_SMPTE = np.array([
+#         [0.75, 0.75, 0.75],
+#         [0.75, 0.75, 0],
+#         [0, 0.75, 0.75],
+#         [0, 0.75, 0],
+#         [0.75, 0, 0.75],
+#         [0.75, 0, 0],
+#         [0, 0, 0.75],
+#     ], np.float64)
 
-    YUV_SMPTE = np.zeros(RGB_SMPTE.shape, np.float64)
-    YUV_SMPTE[0,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[0, :])
-    YUV_SMPTE[1,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[1, :])
-    YUV_SMPTE[2,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[2, :])
-    YUV_SMPTE[3,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[3, :])
-    YUV_SMPTE[4,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[4, :])
-    YUV_SMPTE[5,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[5, :])
-    YUV_SMPTE[6,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[6, :])
+#     YUV_SMPTE = np.zeros(RGB_SMPTE.shape, np.float64)
+#     YUV_SMPTE[0,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[0, :])
+#     YUV_SMPTE[1,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[1, :])
+#     YUV_SMPTE[2,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[2, :])
+#     YUV_SMPTE[3,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[3, :])
+#     YUV_SMPTE[4,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[4, :])
+#     YUV_SMPTE[5,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[5, :])
+#     YUV_SMPTE[6,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[6, :])
 
-    RGB_sub_raw_SMPTE[0,:] = RGB_sub_raw[emphasis, 0x1, 0x0, :]
-    RGB_sub_raw_SMPTE[1,:] = RGB_sub_raw[emphasis, 0x2, 0x8, :]
-    RGB_sub_raw_SMPTE[2,:] = RGB_sub_raw[emphasis, 0x2, 0xC, :]
-    RGB_sub_raw_SMPTE[3,:] = RGB_sub_raw[emphasis, 0x1, 0xA, :]
-    RGB_sub_raw_SMPTE[4,:] = RGB_sub_raw[emphasis, 0x1, 0x4, :]
-    RGB_sub_raw_SMPTE[5,:] = RGB_sub_raw[emphasis, 0x1, 0x6, :]
-    RGB_sub_raw_SMPTE[6,:] = RGB_sub_raw[emphasis, 0x0, 0x2, :]
+#     RGB_sub_raw_SMPTE[0,:] = RGB_sub_raw[emphasis, 0x1, 0x0, :]
+#     RGB_sub_raw_SMPTE[1,:] = RGB_sub_raw[emphasis, 0x2, 0x8, :]
+#     RGB_sub_raw_SMPTE[2,:] = RGB_sub_raw[emphasis, 0x2, 0xC, :]
+#     RGB_sub_raw_SMPTE[3,:] = RGB_sub_raw[emphasis, 0x1, 0xA, :]
+#     RGB_sub_raw_SMPTE[4,:] = RGB_sub_raw[emphasis, 0x1, 0x4, :]
+#     RGB_sub_raw_SMPTE[5,:] = RGB_sub_raw[emphasis, 0x1, 0x6, :]
+#     RGB_sub_raw_SMPTE[6,:] = RGB_sub_raw[emphasis, 0x0, 0x2, :]
 
-    color_theta_SMPTE = np.arctan2(YUV_SMPTE[:, 2], YUV_SMPTE[:, 1])
-    color_r_SMPTE = np.sqrt(YUV_SMPTE[:, 2]**2 + YUV_SMPTE[:, 1]**2)
+#     color_theta_SMPTE = np.arctan2(YUV_SMPTE[:, 2], YUV_SMPTE[:, 1])
+#     color_r_SMPTE = np.sqrt(YUV_SMPTE[:, 2]**2 + YUV_SMPTE[:, 1]**2)
 
-    YUV_calc = np.zeros(RGB_sub_raw_SMPTE.shape, np.float64)
-    YUV_calc[0,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[0, :])
-    YUV_calc[1,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[1, :])
-    YUV_calc[2,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[2, :])
-    YUV_calc[3,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[3, :])
-    YUV_calc[4,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[4, :])
-    YUV_calc[5,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[5, :])
-    YUV_calc[6,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[6, :])
+#     YUV_calc = np.zeros(RGB_sub_raw_SMPTE.shape, np.float64)
+#     YUV_calc[0,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[0, :])
+#     YUV_calc[1,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[1, :])
+#     YUV_calc[2,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[2, :])
+#     YUV_calc[3,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[3, :])
+#     YUV_calc[4,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[4, :])
+#     YUV_calc[5,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[5, :])
+#     YUV_calc[6,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[6, :])
 
-    color_theta = np.arctan2(YUV_calc[:, 2], YUV_calc[:, 1])
-    color_r = np.sqrt(YUV_calc[:, 2]**2 + YUV_calc[:, 1]**2)
+#     color_theta = np.arctan2(YUV_calc[:, 2], YUV_calc[:, 1])
+#     color_r = np.sqrt(YUV_calc[:, 2]**2 + YUV_calc[:, 1]**2)
 
-    print(YUV_calc)
+#     print(YUV_calc)
 
-    fig = plt.figure(tight_layout=True, dpi=96)
-    gs = gridspec.GridSpec(2, 2)
-    ax1 = fig.add_subplot(gs[:, :], projection='polar')
-    fig.suptitle('NES palette')
+#     fig = plt.figure(tight_layout=True, dpi=96)
+#     gs = gridspec.GridSpec(2, 2)
+#     ax1 = fig.add_subplot(gs[:, :], projection='polar')
+#     fig.suptitle('NES palette')
 
-    ax1.set_title("Vectorscope Plot")
-    ax1.set_yticklabels([])
-    ax1.axis([0, 2*np.pi, 0, 0.5])
-    ax1.scatter(color_theta_SMPTE, color_r_SMPTE, c=RGB_SMPTE, marker=None, s=color_r*500, zorder=3)
-    ax1.plot(color_theta, color_r, marker=None, zorder=3)
+#     ax1.set_title("Vectorscope Plot")
+#     ax1.set_yticklabels([])
+#     ax1.axis([0, 2*np.pi, 0, 0.5])
+#     ax1.scatter(color_theta_SMPTE, color_r_SMPTE, c=RGB_SMPTE, marker=None, s=color_r*500, zorder=3)
+#     ax1.plot(color_theta, color_r, marker=None, zorder=3)
 
-    fig.set_size_inches(20, 11.25)
-    fig.tight_layout()
-    plt.show()
-    plt.close()
+#     fig.set_size_inches(20, 11.25)
+#     fig.tight_layout()
+#     plt.show()
+#     plt.close()
