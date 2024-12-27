@@ -34,7 +34,7 @@ usage: palgen_persune.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                          [-blp BLACK_POINT] [-whp WHITE_POINT] [-gai GAIN]
                          [-gam GAMMA] [--delay-line-filter]
                          [-axs {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}]
-                         [-bsd] [-spg] [-phs PHASE_SKEW]
+                         [-bse] [-spg] [-phs PHASE_SKEW]
                          [-aps ANTIEMPHASIS_PHASE_SKEW]
                          [-ela EMPHASIS_LUMA_ATTENUATION]
                          [-rfc REFERENCE_COLORSPACE] [-dsc DISPLAY_COLORSPACE]
@@ -99,8 +99,8 @@ options:
   -axs {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}, --axis-shift {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}
                         axis adjustment for R-Y and G-Y like Sony CXA2025AS,
                         default = None
-  -bsd, --burst-saturation-disable
-                        disable using colorburst amplitude as saturation
+  -bse, --burst-saturation-enable
+                        enable using colorburst amplitude as saturation
                         reference
   -spg, --sinusoidal-peak-generation
                         generate sine waves in composite encoding instead of
@@ -164,7 +164,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.16.0
+version 0.17.0
 ```
 
 ## License

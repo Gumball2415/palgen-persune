@@ -21,7 +21,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.16.0"
+VERSION = "0.17.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -185,10 +185,10 @@ def parse_argv(argv):
         ],
         default = "None")
     parser.add_argument(
-        "-bsd",
-        "--burst-saturation-disable",
+        "-bse",
+        "--burst-saturation-enable",
         action = "store_true",
-        help = "disable using colorburst amplitude as saturation reference")
+        help = "enable using colorburst amplitude as saturation reference")
     parser.add_argument(
         "-spg",
         "--sinusoidal-peak-generation",
@@ -660,18 +660,17 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     color_gen_clock_factor = 2
     buffer_size = int(colorburst_factor * color_gen_clock_factor)
 
-    colorburst_amplitude = 140 * (ppu.colorburst_table_composite[1] - ppu.colorburst_table_composite[0]) # in IRE
-    
-    # SMPTE 170M-2004, page 5, section 8.2
-    # value of 40 IRE based on colorburst p-p amplitude defined in
-    # SMPTE 170M-2004, page 8, Table 1
-    colorburst_amp_reference = 40
-    colorburst_amp_correction = colorburst_amp_reference/colorburst_amplitude
-
-    if (args.burst_saturation_disable): colorburst_amp_correction = 1
-
     # 2x due to integral of sin(2*PI*x)^2
-    saturation_correction = 2 * colorburst_amp_correction
+    saturation_correction = 2
+
+    if (args.burst_saturation_enable):
+        # SMPTE 170M-2004, page 5, section 8.2
+        # value of 40 IRE based on colorburst p-p amplitude defined in
+        # SMPTE 170M-2004, page 8, Table 1
+        colorburst_amp_reference = 40
+        colorburst_amplitude = 140 * (ppu.colorburst_table_composite[1] - ppu.colorburst_table_composite[0]) # in IRE
+        saturation_correction *= colorburst_amp_reference/colorburst_amplitude
+
 
     # signal buffers for decoding
     # 11111------1
