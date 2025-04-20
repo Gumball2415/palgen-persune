@@ -1,27 +1,31 @@
-# palette generator NES
-# Copyright (C) 2024 Persune
+#!/usr/bin/env python3
+# Pally - palette generator for the NES
+# Copyright (C) 2025 Persune
 # inspired by PalGen, Copyright (C) 2018 DragWx <https://github.com/DragWx>
-# testing out the concepts from https://www.nesdev.org/wiki/NTSC_video#Composite_decoding
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy of this
-# software and associated documentation files (the "Software"), to deal in the Software
-# without restriction, including without limitation the rights to use, copy, modify,
-# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
-# permit persons to whom the Software is furnished to do so.
+# also a testbed for video decoding concepts in
+# https://www.nesdev.org/wiki/NTSC_video#Composite_decoding
 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 
 import os, sys
 import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.17.0"
+VERSION = "0.18.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -41,7 +45,7 @@ def parse_argv(argv):
         "-o",
         "--output",
         type=str,
-        help="file output path")
+        help="file output, extension determined with \"--file-format\". if rendering with \"--render-img\", interpreted as folder output.")
     parser.add_argument(
         "-f",
         "--file-format",
@@ -66,14 +70,14 @@ def parse_argv(argv):
         "-t",
         "--test-image",
         type=str,
-        help="use 256x240 uint16 raw binary PPU frame buffer for palette proofreading")
+        help="256x240 uint16 raw binary PPU frame buffer input for palette application")
 
     # visualization options
     parser.add_argument(
         "-r",
         "--render-img",
         type=str,
-        help="render views and diagrams as images in docs folder with the provided file extension.")
+        help="render views and diagrams as images in output folder with the provided file extension.")
     parser.add_argument(
         "-w",
         "--waveforms",
@@ -399,8 +403,10 @@ def palette_plot(RGB_buffer,
     args=None,
     s_colorspace = None,
     t_colorspace = None):
-    if (args.skip_plot and not (export_diagrams or export_img)):
+    if args.skip_plot and not (export_diagrams or export_img):
         return
+    elif args.output is None:
+        sys.exit("error! render diagrams enabled but no output folder")
 
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
@@ -496,9 +502,11 @@ def palette_plot(RGB_buffer,
         # only tighten the layout if the palette preview is enabled
         fig.tight_layout()
     if (export_diagrams):
-        plt.savefig("docs/palette preview emphasis {0:03}.{1}".format(emphasis, args.render_img))
+        outpath: str = os.path.splitext(args.output)[0]+"/palette preview emphasis {0:03}.{1}".format(emphasis, args.render_img)
+        plt.savefig(outpath)
     elif (export_img):
-        plt.savefig("docs/palette preview.{0}".format(args.render_img))
+        outpath: str = os.path.splitext(args.output)[0]+"/palette preview.{0}".format(args.render_img)
+        plt.savefig(outpath)
         if not (args.skip_plot):
             plt.show()
     else:
@@ -520,6 +528,8 @@ def composite_QAM_plot(voltage_buffer,
     args=None,
     signal_black_point=None,
     signal_white_point=None):
+    if args.output is None:
+        sys.exit("error! render diagrams enabled but no output folder")
 
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
@@ -574,12 +584,14 @@ def composite_QAM_plot(voltage_buffer,
 
     fig.set_size_inches(16, 9)
     if (args.render_img is not None):
-        plt.savefig("docs/QAM phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=96)
+        plt.savefig(os.path.splitext(args.output)[0]+"/QAM phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=96)
     else:
         plt.show()
     plt.close()
 
 def composite_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counter, args=None):
+    if args.output is None:
+        sys.exit("error! render diagrams enabled but no output folder")
     import matplotlib.pyplot as plt
 
     fig = plt.figure(tight_layout=True)
@@ -594,7 +606,7 @@ def composite_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counte
 
     fig.set_size_inches(16, 9)
     if (args.render_img is not None):
-        plt.savefig("docs/waveform phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=120)
+        plt.savefig(os.path.splitext(args.output)[0]+"/waveform phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=120)
     else:
         plt.show()
     plt.close()
@@ -640,10 +652,6 @@ def normalize_RGB(RGB_buffer, args=None):
     np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
 
 def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal_white_point=None):
-
-    # used for image sequence plotting
-    sequence_counter = 0
-
     colorburst_phase = 0
     next_line_shift = 0
     if (args.ppu == "2C07"):
@@ -697,7 +705,8 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     for emphasis in range(8):
         for luma in range(4):
             for hue in range(16):
-
+                # used for image sequence plotting
+                sequence_counter = hue + (luma*16) + (emphasis*16*4)
                 # initialize buffers to prevent error propagation
                 voltage_buffer.fill(0)
                 U_buffer.fill(0)
@@ -1272,7 +1281,7 @@ def main(argv=None):
             ".png": output_png
 
         }
-        if (args.output is not None):
+        if (args.output is not None and args.render_img is None):
             output_format[args.file_format](RGB_buffer, args)
 
         s_colorspace.name = "Reference colorspace: {}".format(s_colorspace.name)
@@ -1288,77 +1297,3 @@ def main(argv=None):
 
 if __name__=='__main__':
     main(sys.argv)
-
-# debugging, don't mind this
-# def NES_SMPTE_plot(RGB_uncorrected, emphasis, args=None):
-#     import matplotlib.pyplot as plt
-#     from matplotlib.gridspec import GridSpec
-#     if (args.skip_plot):
-#         return
-#     if not args.emphasis:
-#         RGB_sub_raw = RGB_uncorrected
-#     else:
-#         RGB_sub_raw = np.split(RGB_uncorrected, 8, 0)[emphasis]
-
-#     print(RGB_sub_raw.shape)
-#     RGB_sub_raw_SMPTE = np.zeros([7,3], np.float64)
-
-#     RGB_SMPTE = np.array([
-#         [0.75, 0.75, 0.75],
-#         [0.75, 0.75, 0],
-#         [0, 0.75, 0.75],
-#         [0, 0.75, 0],
-#         [0.75, 0, 0.75],
-#         [0.75, 0, 0],
-#         [0, 0, 0.75],
-#     ], np.float64)
-
-#     YUV_SMPTE = np.zeros(RGB_SMPTE.shape, np.float64)
-#     YUV_SMPTE[0,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[0, :])
-#     YUV_SMPTE[1,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[1, :])
-#     YUV_SMPTE[2,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[2, :])
-#     YUV_SMPTE[3,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[3, :])
-#     YUV_SMPTE[4,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[4, :])
-#     YUV_SMPTE[5,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[5, :])
-#     YUV_SMPTE[6,:] = np.matmul(RGB_to_YUV, RGB_SMPTE[6, :])
-
-#     RGB_sub_raw_SMPTE[0,:] = RGB_sub_raw[emphasis, 0x1, 0x0, :]
-#     RGB_sub_raw_SMPTE[1,:] = RGB_sub_raw[emphasis, 0x2, 0x8, :]
-#     RGB_sub_raw_SMPTE[2,:] = RGB_sub_raw[emphasis, 0x2, 0xC, :]
-#     RGB_sub_raw_SMPTE[3,:] = RGB_sub_raw[emphasis, 0x1, 0xA, :]
-#     RGB_sub_raw_SMPTE[4,:] = RGB_sub_raw[emphasis, 0x1, 0x4, :]
-#     RGB_sub_raw_SMPTE[5,:] = RGB_sub_raw[emphasis, 0x1, 0x6, :]
-#     RGB_sub_raw_SMPTE[6,:] = RGB_sub_raw[emphasis, 0x0, 0x2, :]
-
-#     color_theta_SMPTE = np.arctan2(YUV_SMPTE[:, 2], YUV_SMPTE[:, 1])
-#     color_r_SMPTE = np.sqrt(YUV_SMPTE[:, 2]**2 + YUV_SMPTE[:, 1]**2)
-
-#     YUV_calc = np.zeros(RGB_sub_raw_SMPTE.shape, np.float64)
-#     YUV_calc[0,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[0, :])
-#     YUV_calc[1,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[1, :])
-#     YUV_calc[2,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[2, :])
-#     YUV_calc[3,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[3, :])
-#     YUV_calc[4,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[4, :])
-#     YUV_calc[5,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[5, :])
-#     YUV_calc[6,:] = np.matmul(RGB_to_YUV, RGB_sub_raw_SMPTE[6, :])
-
-#     color_theta = np.arctan2(YUV_calc[:, 2], YUV_calc[:, 1])
-#     color_r = np.sqrt(YUV_calc[:, 2]**2 + YUV_calc[:, 1]**2)
-
-#     print(YUV_calc)
-
-#     fig = plt.figure(tight_layout=True, dpi=96)
-#     gs = gridspec.GridSpec(2, 2)
-#     ax1 = fig.add_subplot(gs[:, :], projection='polar')
-#     fig.suptitle('NES palette')
-
-#     ax1.set_title("Vectorscope Plot")
-#     ax1.set_yticklabels([])
-#     ax1.axis([0, 2*np.pi, 0, 0.5])
-#     ax1.scatter(color_theta_SMPTE, color_r_SMPTE, c=RGB_SMPTE, marker=None, s=color_r*500, zorder=3)
-#     ax1.plot(color_theta, color_r, marker=None, zorder=3)
-
-#     fig.set_size_inches(20, 11.25)
-#     fig.tight_layout()
-#     plt.show()
-#     plt.close()

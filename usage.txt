@@ -1,33 +1,3 @@
-# Pally
-
-Previously known as `palgen_persune`, `palgen-persune`.
-
-Yet another NES palette generator, in Python
-
-<img src="docs/diagrams/palette preview.png">
-<img src="docs/diagrams/waveform phase.gif">
-<img src="docs/diagrams/QAM phase.gif">
-<img src="docs/diagrams/palette preview emphasis.gif">
-
-Something to note: there _is_ no one true NES palette, but this generator
-can pretty much approach colors that looks good enough for use in gaming, art,
-and color work. feel free to adjust!
-
-## Requirements
-
-See `requirements.txt` for more details.
-
-### This script requires:
-
-- `colour-science == 0.4.6`
-  - for linear light, and color adaptation functions.
-- `matplotlib == 3.9.3`
-  - for graphs and `colour-science` CIE 1931 colorimetry diagrams.
-  - additionally, please ensure a GUI backend is available for Linux systems
-
-## Usage
-
-```txt
 usage: pally.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                 [-f {.pal uint8,.pal double,.pal Jasc,.gpl,.png,.txt HTML hex,.txt MediaWiki,.h uint8_t}]
                 [-e] [-t TEST_IMAGE] [-r RENDER_IMG] [-w] [-p]
@@ -169,24 +139,3 @@ options:
                         coordinates
 
 version 0.18.0
-```
-
-## License
-
-This work is licensed under the MIT-0 license.
-
-Copyright (C) Persune 2025.
-
-## Credits
-
-Special thanks to:
-
-- NewRisingSun
-- L. Spiro
-- lidnariq
-- PinoBatch
-- jekuthiel
-- _aitchFactor
-- zeta0134
-
-This would have not been possible without their help!

@@ -1,24 +1,27 @@
-# NES PPU composite video generator
-# Copyright (C) 2024 Persune
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy of this
-# software and associated documentation files (the "Software"), to deal in the Software
-# without restriction, including without limitation the rights to use, copy, modify,
-# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
-# permit persons to whom the Software is furnished to do so.
+#!/usr/bin/env python
+# NES PPU composite video encoder
+# Copyright (C) 2025 Persune
 
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
-# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 
 import argparse
 import sys
 import numpy as np
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 # signal LUTs
 # voltage highs and lows
@@ -60,7 +63,14 @@ def parse_argv(argv):
     return parser.parse_args(argv[1:])
 
 # encodes a composite sample from a given PPU pixel and a given phase
-def encode_composite_sample(ppu_type, emphasis, luma, hue, wave_phase, sinusoidal_peak_generation, alternate_line=False):
+def encode_composite_sample(
+    ppu_type: str,
+    emphasis: int,
+    luma: int,
+    hue: int,
+    wave_phase: int,
+    sinusoidal_peak_generation: bool,
+    alternate_line=False):
     # 2C07 phase alternation
     def pal_phase(hue):
         if (hue >= 1 and hue <= 12) and (ppu_type == "2C07") and alternate_line:
@@ -112,7 +122,16 @@ def encode_composite_sample(ppu_type, emphasis, luma, hue, wave_phase, sinusoida
 
 # input: PPU pixel, buffer size
 # output: np.float64 array
-def encode_buffer(buffer_size, ppu_type, emphasis, luma, hue, wave_phase, sinusoidal_peak_generation, alternate_line=False):
+def encode_buffer(
+    buffer_size: int,
+    ppu_type: str,
+    emphasis: int,
+    luma: int,
+    hue: int,
+    wave_phase: int,
+    sinusoidal_peak_generation: bool,
+    alternate_line=False
+):
     buffer = np.empty([buffer_size], np.float64)
     for buffer_phase in range(buffer_size):
         buffer[buffer_phase] = encode_composite_sample(ppu_type, emphasis, luma, hue, ((buffer_phase + wave_phase) % buffer_size), sinusoidal_peak_generation, alternate_line)

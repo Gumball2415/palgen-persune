@@ -1,15 +1,20 @@
 # graph plotting
 /*.pal
 /*.png
+/docs/*.png
 /docs/*.svg
-/docs/demo_screenshots/*
-/docs/palette preview emphasis 0*
-/docs/QAM phase 0*
-/docs/waveform phase 0*
+/docs/diagrams/palette preview emphasis 0*
+/docs/diagrams/QAM phase 0*
+/docs/diagrams/waveform phase 0*
 
 # virtualenv stuff
 /Lib
 /Scripts
 /share
 /pyvenv.cfg
-/generated/*
+/generated
+/__pycache__
+/palgen_env
+
+#vs code
+/.vscode
