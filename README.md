@@ -4,14 +4,17 @@ Previously known as `palgen_persune`, `palgen-persune`.
 
 Yet another NES palette generator, in Python
 
-<img src="docs/diagrams/palette preview.png">
-<img src="docs/diagrams/waveform phase.gif">
-<img src="docs/diagrams/QAM phase.gif">
-<img src="docs/diagrams/palette preview emphasis.gif">
+![A diagram of a generated palette, with CIE XY chromaticities, color phase, a test image, and color swatches.](docs/diagrams/palette_preview.png)
+![An animated diagram showing the voltage of a period of a given color.](docs/diagrams/waveform_phase.gif)
+![An animated diagram showing QAM demodulation of a given color.](docs/diagrams/QAM_phase.gif)
+![An animated diagram of a generated palette undergoing different emphasis attenuations, with CIE XY chromaticities, color phase, a test image, and color swatches.](docs/diagrams/palette_preview_emphasis.gif)
 
 Something to note: there _is_ no one true NES palette, but this generator
 can pretty much approach colors that looks good enough for use in gaming, art,
 and color work. feel free to adjust!
+
+![Art of Addie by yoeynsf](docs/diagrams/addie.png)
+![Art of Minae by forple](docs/diagrams/minae.png)
 
 ## Requirements
 
@@ -62,13 +65,14 @@ options:
   -o OUTPUT, --output OUTPUT
                         file output, extension determined with "--file-
                         format". if rendering with "--render-img", interpreted
-                        as folder output.
+                        as folder output. if rendering with "--test-image",
+                        interpreted as image output.
   -f {.pal uint8,.pal double,.pal Jasc,.gpl,.png,.txt HTML hex,.txt MediaWiki,.h uint8_t}, --file-format {.pal uint8,.pal double,.pal Jasc,.gpl,.png,.txt HTML hex,.txt MediaWiki,.h uint8_t}
                         file output format. default = ".pal uint8"
   -e, --emphasis        include emphasis entries
   -t TEST_IMAGE, --test-image TEST_IMAGE
-                        256x240 uint16 raw binary PPU frame buffer input for
-                        palette application
+                        256x240 uint16 raw binary PPU frame buffer input to be
+                        applied with a palette
   -r RENDER_IMG, --render-img RENDER_IMG
                         render views and diagrams as images in output folder
                         with the provided file extension.
@@ -168,7 +172,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.18.0
+version 0.19.0
 ```
 
 ## License

@@ -6,10 +6,7 @@ examples_dir := docs/example_palettes
 examples_wiki_dir := docs/NESDev
 diagrams_dir := docs/diagrams
 
-# Some commands differ on Windows vs. POSIX (Linux, BSD, macOS)
-# systems.  Windows needs .exe suffixed to the names of executables;
-# UNIX does not.  Windows starts Python via the PEP 397 launcher
-# (py.exe); UNIX usually starts it via `python3`.
+# taken from NROM template
 ifeq (${OS}, Windows_NT)
 	EXE_SUFFIX := .exe
 	PY := py -3
@@ -18,7 +15,7 @@ else
 	PY := python3
 endif
 
-.PHONY:
+.PHONY: example_palettes example_NESDev diagrams all
 
 all: example_palettes example_NESDev diagrams
 
@@ -141,16 +138,28 @@ ${examples_wiki_dir}/2C03_wiki.pal:
 
 # diagrams
 
-diagrams: ${diagrams_dir}
-	${RM} -r usage.txt
+diagrams: ${diagrams_dir}\
+	usage.txt\
+	${diagrams_dir}/addie.png\
+	${diagrams_dir}/minae.png\
+	${diagrams_dir}/palette_preview_emphasis.gif
 	${PY} pally.py --skip-plot -p -w -r png -o ${diagrams_dir}
-	${PY} pally.py --skip-plot -e -r png -t docs/smb.bin -o ${diagrams_dir}
-	${PY} pally.py -h >> usage.txt
-	ffmpeg -framerate 2 -i "${diagrams_dir}/QAM phase %03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/QAM phase.gif" -y
-	ffmpeg -framerate 2 -i "${diagrams_dir}/waveform phase %03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/waveform phase.gif" -y
-	ffmpeg -framerate 2 -i "${diagrams_dir}/palette preview emphasis %03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/palette preview emphasis.gif" -y
-
+	${PY} pally.py --skip-plot -r png -t docs/smb.bin -o ${diagrams_dir}
+	ffmpeg -framerate 2 -i "${diagrams_dir}/QAM_phase_%03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/QAM_phase.gif" -y
+	ffmpeg -framerate 2 -i "${diagrams_dir}/waveform_phase_%03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/waveform_phase.gif" -y
 
 ${diagrams_dir}:
 	mkdir $@
 
+usage.txt:
+	${PY} pally.py -h >> $@
+
+${diagrams_dir}/addie.png:
+	${PY} pally.py --skip-plot -e -t docs/addie.bin -o $@
+
+${diagrams_dir}/minae.png:
+	${PY} pally.py --skip-plot -ppu "2C03" -e -t docs/minae.bin -o $@
+
+${diagrams_dir}/palette_preview_emphasis.gif:
+	${PY} pally.py --skip-plot -e -r png -o ${diagrams_dir}
+	ffmpeg -framerate 2 -i "${diagrams_dir}/palette_preview_emphasis_%03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "$@" -y

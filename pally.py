@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.18.0"
+VERSION = "0.19.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -45,7 +45,7 @@ def parse_argv(argv):
         "-o",
         "--output",
         type=str,
-        help="file output, extension determined with \"--file-format\". if rendering with \"--render-img\", interpreted as folder output.")
+        help="file output, extension determined with \"--file-format\". if rendering with \"--render-img\", interpreted as folder output. if rendering with \"--test-image\", interpreted as image output.")
     parser.add_argument(
         "-f",
         "--file-format",
@@ -70,7 +70,7 @@ def parse_argv(argv):
         "-t",
         "--test-image",
         type=str,
-        help="256x240 uint16 raw binary PPU frame buffer input for palette application")
+        help="256x240 uint16 raw binary PPU frame buffer input to be applied with a palette")
 
     # visualization options
     parser.add_argument(
@@ -405,12 +405,10 @@ def palette_plot(RGB_buffer,
     t_colorspace = None):
     if args.skip_plot and not (export_diagrams or export_img):
         return
-    elif args.output is None:
-        sys.exit("error! render diagrams enabled but no output folder")
 
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
-    import colour.plotting.diagrams
+    import colour.plotting
 
     # if emphasis enabled, reshape to single emphasis permutation
     if (args.emphasis):
@@ -426,23 +424,21 @@ def palette_plot(RGB_buffer,
     ax0 = fig.add_subplot(gs[1, 1])
     ax1 = fig.add_subplot(gs[0, 1], projection='polar')
     # preview on indexed image (if provided)
-    if (args.test_image is not None and (all_emphasis or not args.emphasis)):
-        ax2 = fig.add_subplot(gs[0, 0])
-        ax3 = fig.add_subplot(gs[1, 0])
-        with open(args.test_image, mode="rb") as index_file:
-            index_image = np.reshape(np.frombuffer(index_file.read(), dtype=np.uint16), (240, 256))
-            preview_image = np.empty([240,256,3], np.float64)
-            for y in range(index_image.shape[0]):
-                for x in range(index_image.shape[1]):
-                    preview_image[y,x] = RGB_sub[(index_image[y,x] >> 4), (index_image[y,x] & 0x0F)]
-            ax3.set_title("Palette preview")
-            ax3.imshow(preview_image)
-            if (export_img):
-                from PIL import Image
-                image_filename = os.path.splitext(args.test_image)[0]
-                imageout = Image.fromarray(np.ubyte(np.around(preview_image * 255)))
-                imageout.save("{0}.png".format(image_filename))
-                imageout.close()
+    if (args.test_image is not None):
+        if all_emphasis or not args.emphasis:
+            ax2 = fig.add_subplot(gs[0, 0])
+            ax3 = fig.add_subplot(gs[1, 0])
+            with open(args.test_image, mode="rb") as index_file:
+                index_image = np.reshape(np.frombuffer(index_file.read(), dtype=np.uint16), (240, 256))
+                preview_image = np.empty([240,256,3], np.float64)
+                for y in range(index_image.shape[0]):
+                    for x in range(index_image.shape[1]):
+                        preview_image[y,x] = RGB_sub[(index_image[y,x] >> 4), (index_image[y,x] & 0x0F)]
+                ax3.set_title("Palette preview")
+                ax3.imshow(preview_image)
+        else:
+            ax2 = fig.add_subplot(gs[:, 0])
+            print("test image with emphasis mode enabled, test image preview will not be rendered.")
     else:
         ax2 = fig.add_subplot(gs[:, 0])
 
@@ -501,15 +497,14 @@ def palette_plot(RGB_buffer,
     if (args.test_image is not None and (all_emphasis or not args.emphasis)):
         # only tighten the layout if the palette preview is enabled
         fig.tight_layout()
-    if (export_diagrams):
-        outpath: str = os.path.splitext(args.output)[0]+"/palette preview emphasis {0:03}.{1}".format(emphasis, args.render_img)
-        plt.savefig(outpath)
-    elif (export_img):
-        outpath: str = os.path.splitext(args.output)[0]+"/palette preview.{0}".format(args.render_img)
-        plt.savefig(outpath)
-        if not (args.skip_plot):
-            plt.show()
-    else:
+    if args.output is not None:
+        if (export_diagrams):
+            outpath: str = os.path.splitext(args.output)[0]+"/palette_preview_emphasis_{0:03}.{1}".format(emphasis, args.render_img)
+            plt.savefig(outpath)
+        elif (export_img):
+            outpath: str = os.path.splitext(args.output)[0]+"/palette_preview.{0}".format(args.render_img)
+            plt.savefig(outpath)
+    if not args.skip_plot:
         plt.show()
     plt.close()
 
@@ -528,8 +523,6 @@ def composite_QAM_plot(voltage_buffer,
     args=None,
     signal_black_point=None,
     signal_white_point=None):
-    if args.output is None:
-        sys.exit("error! render diagrams enabled but no output folder")
 
     import matplotlib.pyplot as plt
     import matplotlib.gridspec as gridspec
@@ -583,15 +576,13 @@ def composite_QAM_plot(voltage_buffer,
     ax1.vlines(color_theta, 0, color_r)
 
     fig.set_size_inches(16, 9)
-    if (args.render_img is not None):
-        plt.savefig(os.path.splitext(args.output)[0]+"/QAM phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=96)
+    if args.render_img is not None and args.output is not None:
+        plt.savefig(os.path.splitext(args.output)[0]+"/QAM_phase_{0:03}.{1}".format(sequence_counter, args.render_img), dpi=96)
     else:
         plt.show()
     plt.close()
 
 def composite_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counter, args=None):
-    if args.output is None:
-        sys.exit("error! render diagrams enabled but no output folder")
     import matplotlib.pyplot as plt
 
     fig = plt.figure(tight_layout=True)
@@ -605,14 +596,13 @@ def composite_waveform_plot(voltage_buffer, emphasis, luma, hue, sequence_counte
     ax.plot(x, y, 'o-', linewidth=0.7)
 
     fig.set_size_inches(16, 9)
-    if (args.render_img is not None):
-        plt.savefig(os.path.splitext(args.output)[0]+"/waveform phase {0:03}.{1}".format(sequence_counter, args.render_img), dpi=120)
+    if args.render_img is not None and args.output is not None:
+        plt.savefig(os.path.splitext(args.output)[0]+"/waveform_phase_{0:03}.{1}".format(sequence_counter, args.render_img), dpi=120)
     else:
         plt.show()
     plt.close()
 
 def normalize_RGB(RGB_buffer, args=None):
-
     def color_clip_darken(RGB_buffer):
         for luma in range(RGB_buffer.shape[0]):
             for chroma in range(RGB_buffer.shape[1]):
@@ -695,12 +685,90 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     # CCCCCC------
 
     voltage_buffer = np.empty((2, buffer_size), np.float64)
-    U_buffer = np.empty([buffer_size], np.float64)
-    V_buffer = np.empty([buffer_size], np.float64)
-    U_decode = np.empty([buffer_size], np.float64)
-    V_decode = np.empty([buffer_size], np.float64)
-    U_comb = np.empty([buffer_size], np.float64)
-    V_comb = np.empty([buffer_size], np.float64)
+    # buffer, decode, and comb
+    U_buffer = np.empty((3, buffer_size), np.float64)
+    V_buffer = np.empty((3, buffer_size), np.float64)
+    t = np.arange(buffer_size)
+
+    def decode_composite(voltage_buffer, U_buffer, V_buffer):
+        YUV = np.zeros((3), np.float64)
+
+        # bandpass UV component
+        voltage_bandpass = voltage_buffer.copy()
+
+        # no comb filter, bandpass only first line
+        voltage_bandpass[0] -= np.average(voltage_bandpass[0])
+        U_buffer[2] = voltage_bandpass[0].copy()
+        V_buffer[2] = voltage_bandpass[0].copy()
+
+        # subcarrier generation is 180 degrees offset
+        # due to the way the waveform is encoded, the hue is off by an additional 1/2 of a sample
+        # if the subcarrier moves forward in angle, the resulting hue goes backwards
+        # hue argument is therefore inverse here
+        U_buffer[1] = np.sin(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
+            np.radians(antiemphasis_column_chroma - phase_skew - args.hue)
+        ) * args.saturation * saturation_correction
+
+        V_buffer[1] = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
+            np.radians(antiemphasis_column_chroma - phase_skew - args.hue)
+        ) * args.saturation * saturation_correction
+
+        U_buffer[0] = U_buffer[2] * U_buffer[1]
+        V_buffer[0] = V_buffer[2] * V_buffer[1]
+
+        # lowpass UV buffers
+        YUV[1] = np.average(U_buffer[0])
+        YUV[2] = np.average(V_buffer[0])
+
+        # decode Y
+        # also apply brightness and contrast
+        YUV[0] = (np.average(voltage_buffer[0]) + emphasis_row_luma) * args.contrast + args.brightness
+        return YUV, U_buffer, V_buffer
+    
+    def decode_composite_dline(voltage_buffer, U_buffer, V_buffer):
+        YUV = np.zeros((3), np.float64)
+
+        # bandpass UV components
+        voltage_bandpass = voltage_buffer.copy()
+        # bandpass and combine lines in specific way to retrieve U and V
+        # based on Single Delay Line PAL Y/C Separator
+        # Jack, K. (2007). NTSC and PAL digital encoding and decoding. In Video
+        # Demystified (5th ed., p. 450). Elsevier.
+        # https://archive.org/details/video-demystified-5th-edition/
+
+        if (args.ppu == "2C07"):
+            voltage_bandpass -= np.average(voltage_bandpass, keepdims=True)
+            U_buffer[2] = (voltage_bandpass[0] + voltage_bandpass[1]) / 2
+            V_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
+        # regular 1D comb bandpasses chroma
+        else:
+            U_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
+            V_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
+
+        # apply hue and saturation in decode wave
+
+        # subcarrier generation is 180 degrees offset
+        # due to the way the waveform is encoded, the hue is off by an additional 1/2 of a sample
+        # if the subcarrier moves forward in angle, the resulting hue goes backwards
+        # hue argument is therefore inverse here
+        U_buffer[1] = np.sin(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
+            np.radians(antiemphasis_column_chroma - phase_skew - args.hue)
+        ) * args.saturation * saturation_correction
+
+        V_buffer[1] = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
+            np.radians(antiemphasis_column_chroma - phase_skew - args.hue)
+        ) * args.saturation * saturation_correction
+
+        U_buffer[0] = U_buffer[2] * U_buffer[1]
+        V_buffer[0] = V_buffer[2] * V_buffer[1]
+
+        # lowpass UV buffers
+        YUV[1] = np.average(U_buffer[0])
+        YUV[2] = np.average(V_buffer[0])
+        
+        # decode Y
+        YUV[0] = (np.average((voltage_buffer[0] + voltage_buffer[1])/2.0) + emphasis_row_luma) * args.contrast + args.brightness
+        return YUV, U_buffer, V_buffer
 
     for emphasis in range(8):
         for luma in range(4):
@@ -711,17 +779,12 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 voltage_buffer.fill(0)
                 U_buffer.fill(0)
                 V_buffer.fill(0)
-                U_decode.fill(0)
-                V_decode.fill(0)
-                U_comb.fill(0)
-                V_comb.fill(0)
 
                 # encode voltages into composite waveform
                 voltage_buffer[0] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, 0, args.sinusoidal_peak_generation)
 
                 # simulate next line by incrementing wave phase and alternating phase
-                if (args.delay_line_filter):
-                    voltage_buffer[1] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, next_line_shift, args.sinusoidal_peak_generation, alternate_line=True)
+                voltage_buffer[1] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, next_line_shift, args.sinusoidal_peak_generation, alternate_line=True)
 
                 # apply analog effects
                 antiemphasis_column_chroma = (
@@ -743,8 +806,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 # decode voltage buffer to YUV
                 # based on SMPTE 170M-2004, page 17, section A.5, equation 10
                 # N = 0.925(Y) + 7.5 + 0.925*(U)*sin(2*π*f_sc*t) + 0.925*(V)*cos(2*π*f_sc*t)
-                # scaling factor 0.925 is already accounted for during normalization
-                # luma pedestal 7.5 is already accounted for during normalization
+                # scaling factor (0.925) and luma pedestal (7.5) are already accounted for during normalization
 
                 # shift blanking to 0
                 voltage_buffer -= composite_black
@@ -755,58 +817,11 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 # apply gain
                 voltage_buffer += args.gain
 
-                # decode U and V
-
-                # bandpass UV component
-                voltage_bandpass = voltage_buffer.copy()
-
-                # comb filter
-                if (args.delay_line_filter):
-                    # bandpass and combine lines in specific way to retrieve U and V
-                    # reference is Video Demystified, 5th edition, p450, Figure 9.37
-                    if (args.ppu == "2C07"):
-                        voltage_bandpass[0] -= np.average(voltage_bandpass[0])
-                        voltage_bandpass[1] -= np.average(voltage_bandpass[1])
-                        U_comb = (voltage_bandpass[0] + voltage_bandpass[1]) / 2
-                        V_comb = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
-                    # regular 1D comb bandpasses chroma
-                    else:
-                        U_comb = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
-                        V_comb = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
+                # decode YUV
+                if args.delay_line_filter:
+                    YUV_buffer[emphasis, luma, hue], U_buffer, V_buffer = decode_composite_dline(voltage_buffer, U_buffer, V_buffer)
                 else:
-                    # no comb filter, bandpass only first line
-                    voltage_bandpass[0] -= np.average(voltage_bandpass[0])
-                    U_comb = voltage_bandpass[0].copy()
-                    V_comb = voltage_bandpass[0].copy()
-
-                # apply hue and saturation in decode wave
-                t = np.arange(12)
-
-                # subcarrier generation is 180 degrees offset
-                # due to the way the waveform is encoded, the hue is off by an additional 1/2 of a sample
-                # if the subcarrier moves forward in angle, the resulting hue goes backwards
-                # hue argument is therefore inverse here
-                U_decode = np.sin(2 * np.pi / 12 * (t - 1 - colorburst_phase - 0.5) +
-                    np.radians(antiemphasis_column_chroma - phase_skew - args.hue)
-                ) * args.saturation * saturation_correction
-
-                V_decode = np.cos(2 * np.pi / 12 * (t - 1 - colorburst_phase - 0.5) +
-                    np.radians(antiemphasis_column_chroma - phase_skew - args.hue)
-                ) * args.saturation * saturation_correction
-
-                U_buffer = U_comb * U_decode
-                V_buffer = V_comb * V_decode
-
-                # lowpass UV buffers
-                YUV_buffer[emphasis, luma, hue, 1] = np.average(U_buffer)
-                YUV_buffer[emphasis, luma, hue, 2] = np.average(V_buffer)
-
-                # decode Y
-                # also apply brightness and contrast
-                if (args.delay_line_filter):
-                    YUV_buffer[emphasis, luma, hue, 0] = (np.average(voltage_buffer[0] - voltage_bandpass[0]) + emphasis_row_luma) * args.contrast + args.brightness
-                else:
-                    YUV_buffer[emphasis, luma, hue, 0] = (np.average(voltage_buffer[0]) + emphasis_row_luma) * args.contrast + args.brightness
+                    YUV_buffer[emphasis, luma, hue], U_buffer, V_buffer = decode_composite(voltage_buffer, U_buffer, V_buffer)
 
                 # visualize chroma decoding
                 if (args.debug):
@@ -814,9 +829,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 if (args.waveforms):
                     composite_waveform_plot(voltage_buffer[0], emphasis, luma, hue, sequence_counter, args)
                 if (args.phase_QAM):
-                    composite_QAM_plot(voltage_buffer, U_comb, V_comb, U_decode, V_decode, U_buffer, V_buffer, buffer_size, emphasis, luma, hue, sequence_counter, args, signal_black_point, signal_white_point)
-
-                sequence_counter += 1
+                    composite_QAM_plot(voltage_buffer, U_buffer[2], V_buffer[2], U_buffer[1], V_buffer[1], U_buffer[0], V_buffer[0], buffer_size, emphasis, luma, hue, sequence_counter, args, signal_black_point, signal_white_point)
 
         if not (args.emphasis):
             # clip unused emphasis space
@@ -974,17 +987,13 @@ def output_gimp_pal(RGB_buffer, args=None):
 def output_png(RGB_buffer, args=None):
     if (args.emphasis):
         sys.exit("error: this format does not support emphasis")
-    from PIL import Image, ImagePalette
+    from PIL import Image
     imgindex = np.arange(0, int(RGB_buffer.size/3), dtype=np.uint8)
 
     img = Image.frombytes('P', (RGB_buffer.shape[1],RGB_buffer.shape[0]), imgindex)
     # convert to list of uint8
-    RGB_buffer_uint8 = list(
-        np.uint8(
-            np.around(
-                RGB_buffer * 0xFF)).ravel())
 
-    img.putpalette(list(RGB_buffer_uint8), rawmode="RGB")
+    img.putpalette(list(np.uint8(np.around(RGB_buffer * 0xFF)).ravel()), rawmode="RGB")
     img.save((os.path.splitext(args.output)[0] + ".png"), optimize=True)
 
 def output_jasc_pal(RGB_buffer, args=None):
@@ -1281,11 +1290,28 @@ def main(argv=None):
             ".png": output_png
 
         }
-        if (args.output is not None and args.render_img is None):
+        if (args.output is not None and args.render_img is None and args.test_image is None):
             output_format[args.file_format](RGB_buffer, args)
 
         s_colorspace.name = "Reference colorspace: {}".format(s_colorspace.name)
         t_colorspace.name = "Display colorspace: {}".format(t_colorspace.name)
+
+
+        # preview on indexed image (if provided)
+        # if preview is on and render_img is off, render the indexed image
+        if args.test_image is not None and args.output is not None and args.render_img is None:
+            with open(args.test_image, mode="rb") as index_file:
+                ppubuf = np.reshape(np.frombuffer(index_file.read(), dtype=np.uint16), (240, 256))
+                preview_image = np.empty([240,256,3], np.float64)
+                mask = 0x1F if args.emphasis else 0x03
+                for y in range(ppubuf.shape[0]):
+                    for x in range(ppubuf.shape[1]):
+                        preview_image[y,x] = RGB_buffer[(ppubuf[y,x] >> 4) & mask, (ppubuf[y,x] & 0x0F)]
+                from PIL import Image
+                image_filename = os.path.splitext(args.output)[0]
+                imageout = Image.fromarray(np.ubyte(np.around(preview_image * 255)))
+                imageout.save("{0}.png".format(image_filename))
+                imageout.close()
 
         if (args.render_img is not None):
             for emphasis in range(8):

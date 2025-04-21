@@ -1,11 +1,10 @@
 # graph plotting
 /*.pal
 /*.png
-/docs/*.png
 /docs/*.svg
-/docs/diagrams/palette preview emphasis 0*
-/docs/diagrams/QAM phase 0*
-/docs/diagrams/waveform phase 0*
+/docs/diagrams/palette_preview_emphasis_0*
+/docs/diagrams/QAM_phase_0*
+/docs/diagrams/waveform_phase_0*
 
 # virtualenv stuff
 /Lib

@@ -32,13 +32,14 @@ options:
   -o OUTPUT, --output OUTPUT
                         file output, extension determined with "--file-
                         format". if rendering with "--render-img", interpreted
-                        as folder output.
+                        as folder output. if rendering with "--test-image",
+                        interpreted as image output.
   -f {.pal uint8,.pal double,.pal Jasc,.gpl,.png,.txt HTML hex,.txt MediaWiki,.h uint8_t}, --file-format {.pal uint8,.pal double,.pal Jasc,.gpl,.png,.txt HTML hex,.txt MediaWiki,.h uint8_t}
                         file output format. default = ".pal uint8"
   -e, --emphasis        include emphasis entries
   -t TEST_IMAGE, --test-image TEST_IMAGE
-                        256x240 uint16 raw binary PPU frame buffer input for
-                        palette application
+                        256x240 uint16 raw binary PPU frame buffer input to be
+                        applied with a palette
   -r RENDER_IMG, --render-img RENDER_IMG
                         render views and diagrams as images in output folder
                         with the provided file extension.
@@ -138,4 +139,4 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.18.0
+version 0.19.0
