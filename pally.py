@@ -695,9 +695,9 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
 
         # bandpass UV component
         voltage_bandpass = voltage_buffer.copy()
+        voltage_bandpass[0] -= np.average(voltage_bandpass[0])
 
         # no comb filter, bandpass only first line
-        voltage_bandpass[0] -= np.average(voltage_bandpass[0])
         U_buffer[2] = voltage_bandpass[0].copy()
         V_buffer[2] = voltage_bandpass[0].copy()
 
@@ -730,20 +730,21 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
 
         # bandpass UV components
         voltage_bandpass = voltage_buffer.copy()
+        voltage_bandpass -= np.average(voltage_bandpass, keepdims=True)
         # bandpass and combine lines in specific way to retrieve U and V
         # based on Single Delay Line PAL Y/C Separator
         # Jack, K. (2007). NTSC and PAL digital encoding and decoding. In Video
         # Demystified (5th ed., p. 450). Elsevier.
         # https://archive.org/details/video-demystified-5th-edition/
 
+        # regular 1D comb chroma bandpass
+        U_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
+        V_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
+
         if (args.ppu == "2C07"):
-            voltage_bandpass -= np.average(voltage_bandpass, keepdims=True)
+            # invert combination to retrieve U
             U_buffer[2] = (voltage_bandpass[0] + voltage_bandpass[1]) / 2
-            V_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
-        # regular 1D comb bandpasses chroma
-        else:
-            U_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
-            V_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
+            # V_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
 
         # apply hue and saturation in decode wave
 
@@ -767,7 +768,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
         YUV[2] = np.average(V_buffer[0])
         
         # decode Y
-        YUV[0] = (np.average((voltage_buffer[0] + voltage_buffer[1])/2.0) + emphasis_row_luma) * args.contrast + args.brightness
+        YUV[0] = (np.average(voltage_buffer[0]) + emphasis_row_luma) * args.contrast + args.brightness
         return YUV, U_buffer, V_buffer
 
     for emphasis in range(8):

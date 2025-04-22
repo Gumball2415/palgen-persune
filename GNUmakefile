@@ -39,7 +39,7 @@ example_palettes: ${examples_dir}\
 # example palettes with different settings
 
 ${examples_dir}:
-	mkdir $@
+	mkdir $@ -p
 
 # no special options
 ${examples_dir}/2C02_default.pal:
@@ -99,7 +99,7 @@ example_NESDev: ${examples_wiki_dir}\
 
 
 ${examples_wiki_dir}:
-	mkdir $@
+	mkdir $@ -p
 
 # 2C02G with phase skew of -5 degrees
 ${examples_wiki_dir}/2C02G_wiki_palette_page.txt:
@@ -149,7 +149,7 @@ diagrams: ${diagrams_dir}\
 	ffmpeg -framerate 2 -i "${diagrams_dir}/waveform_phase_%03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/waveform_phase.gif" -y
 
 ${diagrams_dir}:
-	mkdir $@
+	mkdir $@ -p
 
 usage.txt:
 	${PY} pally.py -h >> $@
