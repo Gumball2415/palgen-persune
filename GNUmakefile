@@ -143,7 +143,7 @@ diagrams: ${diagrams_dir}\
 	${diagrams_dir}/addie.png\
 	${diagrams_dir}/minae.png\
 	${diagrams_dir}/palette_preview_emphasis.gif
-	${PY} pally.py --skip-plot -p -w -r png -o ${diagrams_dir}
+	${PY} pally.py --skip-plot -p -w -r png -o ${diagrams_dir} -phs -5
 	${PY} pally.py --skip-plot -r png -t docs/smb.bin -o ${diagrams_dir}
 	ffmpeg -framerate 2 -i "${diagrams_dir}/QAM_phase_%03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/QAM_phase.gif" -y
 	ffmpeg -framerate 2 -i "${diagrams_dir}/waveform_phase_%03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/waveform_phase.gif" -y
@@ -152,6 +152,7 @@ ${diagrams_dir}:
 	mkdir $@ -p
 
 usage.txt:
+	${RM} -r $@
 	${PY} pally.py -h >> $@
 
 ${diagrams_dir}/addie.png:

@@ -74,7 +74,11 @@ def encode_composite_sample(
     # 2C07 phase alternation
     def pal_phase(hue):
         if (hue >= 1 and hue <= 12) and (ppu_type == "2C07") and alternate_line:
-            return (-(hue - 3) % 12)
+            # from 1...12 to 0...11
+            h = hue-1
+            h = (-(h - 1) % 12)
+            # return to 1...12
+            return h+1
         else:
             return hue
 
