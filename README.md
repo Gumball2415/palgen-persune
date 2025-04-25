@@ -41,7 +41,8 @@ usage: pally.py [-h] [-d] [--skip-plot] [-o OUTPUT]
                 [-whp WHITE_POINT] [-gai GAIN] [-gam GAMMA]
                 [--delay-line-filter]
                 [-axs {None,CXA2025AS_JP,CXA2025AS_US,bisqwit_NTSC_1953}]
-                [-bse] [-spg] [-phs PHASE_SKEW] [-aps ANTIEMPHASIS_PHASE_SKEW]
+                [-bse] [-spg] [-phs PHASE_SKEW] [-phd PHASE_DISTORTION]
+                [-aps ANTIEMPHASIS_PHASE_SKEW]
                 [-ela EMPHASIS_LUMA_ATTENUATION] [-rfc REFERENCE_COLORSPACE]
                 [-dsc DISPLAY_COLORSPACE]
                 [-cat CHROMATIC_ADAPTATION_TRANSFORM] [-ict]
@@ -114,10 +115,14 @@ options:
                         generate sine waves in composite encoding instead of
                         square waves
   -phs PHASE_SKEW, --phase-skew PHASE_SKEW
-                        differential phase distortion for composite PPUs, in
-                        degrees, default = 0.0
+                        hue shift per luma for composite PPUs, in degrees,
+                        default = 0.0
+  -phd PHASE_DISTORTION, --phase-distortion PHASE_DISTORTION
+                        amount of voltage-dependent impedance for RC lowpass,
+                        where C=1e-8 and R= phd * (1 - level/composite_white).
+                        this may desaturate the resulting color. default = 0.0
   -aps ANTIEMPHASIS_PHASE_SKEW, --antiemphasis-phase-skew ANTIEMPHASIS_PHASE_SKEW
-                        additonal phase distortion on colors $x2/$x6/$xA for
+                        additonal hue shift on colors $x2/$x6/$xA for
                         composite PPUs, in degrees, default = 0.0
   -ela EMPHASIS_LUMA_ATTENUATION, --emphasis-luma-attenuation EMPHASIS_LUMA_ATTENUATION
                         additonal luma brightness on colors $x4/$x8/$xC for
@@ -172,7 +177,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.19.0
+version 0.20.0
 ```
 
 ## License

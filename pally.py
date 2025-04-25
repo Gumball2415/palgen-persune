@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.19.0"
+VERSION = "0.20.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -204,13 +204,20 @@ def parse_argv(argv):
         "-phs",
         "--phase-skew",
         type = np.float64,
-        help = "differential phase distortion for composite PPUs, in degrees, default = 0.0",
+        help = "hue shift per luma for composite PPUs, in degrees, default = 0.0",
         default = 0)
+    # analog effects options
+    parser.add_argument(
+        "-phd",
+        "--phase-distortion",
+        type = np.float64,
+        help = "amount of voltage-dependent impedance for RC lowpass, where C=1e-8 and R= phd * (1 - level/composite_white). this may desaturate the resulting color. default = 0.0",
+        default = 0.0)
     parser.add_argument(
         "-aps",
         "--antiemphasis-phase-skew",
         type = np.float64,
-        help = "additonal phase distortion on colors $x2/$x6/$xA for composite PPUs, in degrees, default = 0.0",
+        help = "additonal hue shift on colors $x2/$x6/$xA for composite PPUs, in degrees, default = 0.0",
         default = 0)
     parser.add_argument(
         "-ela",
@@ -391,6 +398,8 @@ YUV_to_RGB_CXA_US = np.array([
 
 composite_black = ppu.signal_table_composite[1, 1, 0]
 composite_white = ppu.signal_table_composite[3, 0, 0]
+composite_CbL = ppu.signal_table_composite[4, 1, 0]
+composite_CbH = ppu.signal_table_composite[4, 0, 0]
 
 # figure plotting for palette preview
 # TODO: interactivity
@@ -647,7 +656,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     if (args.ppu == "2C07"):
         # $x7 == -U - 45 degrees
         # will flip to -U + 45 in pal_phase()
-        colorburst_phase = 7 + 0.5
+        colorburst_phase = 7 #+ 0.5
         next_line_shift = 2
     else:
         # $x8 = -U
@@ -666,7 +675,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
         # value of 40 IRE based on colorburst p-p amplitude defined in
         # SMPTE 170M-2004, page 8, Table 1
         colorburst_amp_reference = 40
-        colorburst_amplitude = 140 * (ppu.colorburst_table_composite[1] - ppu.colorburst_table_composite[0]) # in IRE
+        colorburst_amplitude = 140 * (composite_CbH - composite_CbL) # in IRE
         saturation_correction *= colorburst_amp_reference/colorburst_amplitude
 
 
@@ -695,24 +704,10 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
         YUV = np.zeros((3), np.float64)
 
         # bandpass UV component
-        voltage_bandpass = voltage_buffer.copy()
-        voltage_bandpass[0] -= np.average(voltage_bandpass[0])
-
         # no comb filter, bandpass only first line
-        U_buffer[2] = voltage_bandpass[0].copy()
-        V_buffer[2] = voltage_bandpass[0].copy()
-
-        # subcarrier generation is 180 degrees offset
-        # due to the way the waveform is encoded, the hue is off by an additional 1/2 of a sample
-        # if the subcarrier moves forward in angle, the resulting hue goes backwards
-        # hue argument is therefore inverse here
-        U_buffer[1] = np.sin(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
-            np.radians(antiemphasis_column_chroma - args.hue)
-        ) * args.saturation * saturation_correction
-
-        V_buffer[1] = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
-            np.radians(antiemphasis_column_chroma - args.hue)
-        ) * args.saturation * saturation_correction
+        voltage_avg = np.average(voltage_buffer[0])
+        U_buffer[2] = voltage_buffer[0] - voltage_avg
+        V_buffer[2] = voltage_buffer[0] - voltage_avg
 
         U_buffer[0] = U_buffer[2] * U_buffer[1]
         V_buffer[0] = V_buffer[2] * V_buffer[1]
@@ -723,7 +718,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
 
         # decode Y
         # also apply brightness and contrast
-        YUV[0] = (np.average(voltage_buffer[0]) + emphasis_row_luma) * args.contrast + args.brightness
+        YUV[0] = (voltage_avg + emphasis_row_luma) * args.contrast + args.brightness
         return YUV, U_buffer, V_buffer
     
     def decode_composite_dline(voltage_buffer, U_buffer, V_buffer):
@@ -752,25 +747,13 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
 
         # apply hue and saturation in decode wave
 
-        # subcarrier generation is 180 degrees offset
-        # due to the way the waveform is encoded, the hue is off by an additional 1/2 of a sample
-        # if the subcarrier moves forward in angle, the resulting hue goes backwards
-        # hue argument is therefore inverse here
-        U_buffer[1] = np.sin(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
-            np.radians(antiemphasis_column_chroma - args.hue)
-        ) * args.saturation * saturation_correction
-
-        V_buffer[1] = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
-            np.radians(antiemphasis_column_chroma - args.hue)
-        ) * args.saturation * saturation_correction
-
         U_buffer[0] = U_buffer[2] * U_buffer[1]
         V_buffer[0] = V_buffer[2] * V_buffer[1]
 
         # lowpass UV buffers
         YUV[1] = np.average(U_buffer[0])
         YUV[2] = np.average(V_buffer[0])
-        
+
         # decode Y
         YUV[0] = (np.average(voltage_buffer) + emphasis_row_luma) * args.contrast + args.brightness
         return YUV, U_buffer, V_buffer
@@ -791,6 +774,26 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
         signal *= np.exp(-1j * np.deg2rad(angle)/PPU_Cb * n)
         signal = ifft(signal, n=len(signal))
         return signal
+
+    # phase shift the composite using a simple lowpass
+    # for differential phase distortion
+    # https://en.wikipedia.org/wiki/Low-pass_filter#Simple_infinite_impulse_response_filter
+    def differential_phase(signal, amount):
+        v_out = np.zeros(signal.shape, np.float64)
+        v_prev = signal[0]
+        dt = 1/PPU_Fs
+        for i in range(len(signal)):
+            # impedance changes depending on voltage
+            v_prev_norm = 1 - (v_prev / composite_white)
+            z_var = v_prev_norm * amount
+            R = z_var
+            C = 1e-8
+            tau = R*C
+            alpha = dt / (tau + dt)
+            v_in = signal[i]
+            v_prev = alpha * v_in + (1-alpha) * v_prev
+            v_out[i] = v_prev
+        return v_out
 
     for emphasis in range(8):
         for luma in range(4):
@@ -817,14 +820,27 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                         hue == 0xC)
                     else 0)
 
-                phase_skew = args.phase_skew * luma
 
-                if phase_skew != 0.0:
-                    # encode voltages into composite waveform
-                    voltage_buffer[0] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, 0, args.sinusoidal_peak_generation)
+                # encode voltages into composite waveform
+                voltage_buffer[0] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, 0, args.sinusoidal_peak_generation)
 
-                    # simulate next line by incrementing wave phase and alternating phase
-                    voltage_buffer[1] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, next_line_shift, args.sinusoidal_peak_generation, True)
+                # simulate next line by incrementing wave phase and alternating phase
+                voltage_buffer[1] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, next_line_shift, args.sinusoidal_peak_generation, True)
+
+                # subcarrier generation is 180 degrees offset
+                # due to the way the waveform is encoded, the hue is off by an additional 1/2 of a sample
+                # if the subcarrier moves forward in angle, the resulting hue goes backwards
+                # hue argument is therefore inverse here
+                U_buffer[1] = np.sin(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
+                    np.radians(antiemphasis_column_chroma - args.hue)
+                ) * args.saturation * saturation_correction
+
+                V_buffer[1] = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
+                    np.radians(antiemphasis_column_chroma - args.hue)
+                ) * args.saturation * saturation_correction
+
+                if args.phase_skew != 0:
+                    phase_skew = args.phase_skew * luma
 
                     # repeat signal n times to avoid edge fringes
                     repeat_cycle = 10
@@ -838,9 +854,58 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                     signal_start = int(buffer_size*(repeat_cycle/2))
                     signal_stop =  int(buffer_size*(repeat_cycle/2)+buffer_size)
                     voltage_buffer = voltage_buffer[:, signal_start:signal_stop]
-                else:
-                    voltage_buffer[0] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, 0, args.sinusoidal_peak_generation)
-                    voltage_buffer[1] = ppu.encode_buffer(buffer_size, args.ppu, emphasis, luma, hue, next_line_shift, args.sinusoidal_peak_generation, True)
+                elif args.phase_distortion != 0:
+                    # repeat signal n times to avoid edge fringes
+                    repeat_cycle = 10
+                    voltage_buffer = np.tile(voltage_buffer, repeat_cycle)
+
+                    # phase shift according to phase_skew, if any
+                    voltage_buffer[0] = differential_phase(voltage_buffer[0], args.phase_distortion)
+                    voltage_buffer[1] = differential_phase(voltage_buffer[1], args.phase_distortion)
+
+                    # truncate signal at the end
+                    signal_start = int(buffer_size*repeat_cycle-buffer_size)
+                    signal_stop =  signal_start + buffer_size
+                    voltage_buffer = voltage_buffer[:, signal_start:signal_stop]
+
+                    # generate U and V decoder sines based on phase skew
+                    U_decode = ppu.encode_buffer(buffer_size, args.ppu, 0, 4, (6+colorburst_phase)%12, 0, args.sinusoidal_peak_generation)
+
+                    U_decode = np.tile(U_decode, repeat_cycle)
+                    U_decode = differential_phase(U_decode, args.phase_distortion)
+
+                    U_decode = U_decode[signal_start:signal_stop]
+
+                    # lowpass to cutoff freq
+                    U_decode = fft(U_decode, n=len(U_decode))
+                    U_decode *= [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                    U_decode = ifft(U_decode, n=len(U_decode))
+
+                    # normalize
+                    U_decode -= U_decode.min()
+                    U_decode /= (U_decode.max() - U_decode.min())
+                    U_decode -= np.average(U_decode)
+                    U_decode *= 2 * args.saturation * saturation_correction
+                    U_buffer[1] = U_decode
+
+                    # ditto for V decoder, but shift phase by 90 degrees
+                    V_decode = ppu.encode_buffer(buffer_size, args.ppu, 0, 4, (6+colorburst_phase+3)%12, 0, args.sinusoidal_peak_generation)
+
+                    V_decode = np.tile(V_decode, repeat_cycle)
+                    V_decode = differential_phase(V_decode, args.phase_distortion)
+
+                    V_decode = V_decode[signal_start:signal_stop]
+
+                    V_decode = fft(V_decode, n=len(V_decode))
+                    V_decode *= [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                    V_decode = ifft(V_decode, n=len(V_decode))
+
+                    V_decode -= V_decode.min()
+                    V_decode /= (V_decode.max() - V_decode.min())
+                    V_decode -= np.average(V_decode)
+                    V_decode *= 2 * args.saturation * saturation_correction
+                    V_buffer[1] = V_decode
+
 
 
                 # decode voltage buffer to YUV

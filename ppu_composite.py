@@ -21,12 +21,13 @@ import argparse
 import sys
 import numpy as np
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 
 # signal LUTs
 # voltage highs and lows
 # from https://forums.nesdev.org/viewtopic.php?p=159266#p159266
-# signal[4][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
+# signal[5][2][2] $0x-$3x, $x0/$xD, no emphasis/emphasis
+# 5th index is purely colorburst
 signal_table_composite = np.array([
     [
         [ 0.616, 0.500 ],
@@ -43,11 +44,14 @@ signal_table_composite = np.array([
     [
         [ 1.100, 0.896 ],
         [ 0.880, 0.712 ]
+    ],
+    # colorburst high, colorburst low
+    [
+        [ 0.524, 0.524 ],
+        [ 0.148, 0.148 ]
     ]
 ], np.float64)
 
-# colorburst[2] colorburst low, colorburst high
-colorburst_table_composite = np.array([0.148, 0.524], np.float64)
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -75,54 +79,56 @@ def encode_composite_sample(
     def pal_phase(hue):
         if (hue >= 1 and hue <= 12) and (ppu_type == "2C07") and alternate_line:
             # from 1...12 to 0...11
-            h = hue-1
-            h = (-(h - 1) % 12)
+            hue -= 1
+            hue = (-(hue - 1) % 12)
             # return to 1...12
-            return h+1
+            return hue+1
         else:
             return hue
 
     # waveform generation
     def in_color_phase(hue, phase):
         return ((pal_phase(hue) + phase) % 12) < 6
+    # 1 = emphasis activate
+    if emphasis != 0:
+        attenuate = int(
+            (((emphasis & 1) and in_color_phase(0xC, wave_phase)) or
+            ((emphasis & 2) and in_color_phase(0x4, wave_phase)) or
+            ((emphasis & 4) and in_color_phase(0x8, wave_phase))) and
+            (hue < 0xE)
+        )
+    else: attenuate = 0
+
+    # generate sinusoidal waveforms with matching p-p amplitudes
+    if (sinusoidal_peak_generation):
+        wave_amp = (signal_table_composite[luma, 0, attenuate] - signal_table_composite[luma, 1, attenuate]) / 2
+
+        # rows $x0 and $xD
+        luma_offset = (signal_table_composite[luma, 1, attenuate] + signal_table_composite[luma, 0, attenuate]) / 2
+        if (hue == 0x00):
+            wave_amp = 0
+            luma_offset = signal_table_composite[luma, 0, attenuate]
+        
+        if (hue >= 0x0D):
+            wave_amp = 0
+            luma_offset = signal_table_composite[luma, 1, attenuate]
+
+        return luma_offset + (np.sin((2 * np.pi * (hue+0.5)/12) + (2 * np.pi / 12 * (wave_phase))) * wave_amp)
 
     #columns $xE-$xF
-    luma_index = luma
     if (hue >= 0xE):
-        luma_index = 0x1
+        luma = 0x1
 
     # 0 = waveform high; 1 = waveform low
     n_wave_level = int(not in_color_phase(hue, wave_phase))
 
-    # 1 = emphasis activate
-    emphasis_level = int(
-        (((emphasis & 1) and in_color_phase(0xC, wave_phase)) or
-        ((emphasis & 2) and in_color_phase(0x4, wave_phase)) or
-        ((emphasis & 4) and in_color_phase(0x8, wave_phase))) and
-        (hue < 0xE)
-    )
-
-    # generate sinusoidal waveforms with matching p-p amplitudes
-    if (sinusoidal_peak_generation):
-        wave_amp = (signal_table_composite[luma_index, 0, emphasis_level] - signal_table_composite[luma_index, 1, emphasis_level]) / 2
-
-        # rows $x0 and $xD
-        luma_offset = (signal_table_composite[luma_index, 1, emphasis_level] + signal_table_composite[luma_index, 0, emphasis_level]) / 2
-        if (hue == 0x00):
-            wave_amp = 0
-            luma_offset = signal_table_composite[luma_index, 0, emphasis_level]
-        
-        if (hue >= 0x0D):
-            wave_amp = 0
-            luma_offset = signal_table_composite[luma_index, 1, emphasis_level]
-
-        return luma_offset + (np.sin((2 * np.pi * (hue+0.5)/12) + (2 * np.pi / 12 * (wave_phase))) * wave_amp)
-
     # rows $x0 and $xD
     if (hue == 0x0): n_wave_level = 0
-    if (hue >= 0xD): n_wave_level = 1
+    elif (hue >= 0xD): n_wave_level = 1
 
-    return signal_table_composite[luma_index, n_wave_level, emphasis_level]
+    output_voltage = signal_table_composite[luma, n_wave_level, attenuate]
+
+    return output_voltage
 
 # input: PPU pixel, buffer size
 # output: np.float64 array
