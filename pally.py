@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.20.0"
+VERSION = "0.21.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -211,7 +211,7 @@ def parse_argv(argv):
         "-phd",
         "--phase-distortion",
         type = np.float64,
-        help = "amount of voltage-dependent impedance for RC lowpass, where C=1e-8 and R= phd * (1 - level/composite_white). this may desaturate the resulting color. default = 0.0",
+        help = "amount of voltage-dependent impedance for RC lowpass, where RC = \"amount * (1 - level/composite_white) *  3e-8\". this will also desaturate and hue shift the resulting colors nonlinearly. a value of 1 roughly corresponds to a -5 degree delta per luma row. default = 0.0",
         default = 0.0)
     parser.add_argument(
         "-aps",
@@ -778,22 +778,32 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     # phase shift the composite using a simple lowpass
     # for differential phase distortion
     # https://en.wikipedia.org/wiki/Low-pass_filter#Simple_infinite_impulse_response_filter
-    def differential_phase(signal, amount):
+    def RC_lowpass(signal, amount):
         v_out = np.zeros(signal.shape, np.float64)
         v_prev = signal[0]
         dt = 1/PPU_Fs
         for i in range(len(signal)):
-            # impedance changes depending on voltage
-            v_prev_norm = 1 - (v_prev / composite_white)
-            z_var = v_prev_norm * amount
-            R = z_var
-            C = 1e-8
-            tau = R*C
-            alpha = dt / (tau + dt)
+            # impedance changes depending on DAC tap
+            # we approximate this by using the raw signal's voltage
+            # the ratio is inverted because the phase shifts negative on higher levels
+            # https://forums.nesdev.org/viewtopic.php?p=287241#p287241
+            v_prev_norm = 1 - (signal[i] / composite_white)
+
+            # RC constant tuned so that 0x and 3x colors have around 15 degree delta when phd = 1
+            # https://forums.nesdev.org/viewtopic.php?p=186297#p186297
+            alpha = dt / (v_prev_norm * amount * 3e-8 + dt)
             v_in = signal[i]
             v_prev = alpha * v_in + (1-alpha) * v_prev
             v_out[i] = v_prev
         return v_out
+
+    def QAM_phase(signal, buffer_size):
+        t = np.arange(buffer_size)
+        U = np.sin(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) )
+        V = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) )
+        signal_U = np.average(signal.real * U)
+        signal_V = np.average(signal.real * V)
+        return np.atan2(signal_U, signal_V)
 
     for emphasis in range(8):
         for luma in range(4):
@@ -860,50 +870,52 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                     voltage_buffer = np.tile(voltage_buffer, repeat_cycle)
 
                     # phase shift according to phase_skew, if any
-                    voltage_buffer[0] = differential_phase(voltage_buffer[0], args.phase_distortion)
-                    voltage_buffer[1] = differential_phase(voltage_buffer[1], args.phase_distortion)
+                    voltage_buffer[0] = RC_lowpass(voltage_buffer[0], args.phase_distortion)
+                    voltage_buffer[1] = RC_lowpass(voltage_buffer[1], args.phase_distortion)
 
                     # truncate signal at the end
                     signal_start = int(buffer_size*repeat_cycle-buffer_size)
                     signal_stop =  signal_start + buffer_size
                     voltage_buffer = voltage_buffer[:, signal_start:signal_stop]
 
-                    # generate U and V decoder sines based on phase skew
+                    # generate U and V decoder waveforms based on phase skew
                     U_decode = ppu.encode_buffer(buffer_size, args.ppu, 0, 4, (6+colorburst_phase)%12, 0, args.sinusoidal_peak_generation)
 
                     U_decode = np.tile(U_decode, repeat_cycle)
-                    U_decode = differential_phase(U_decode, args.phase_distortion)
+                    U_decode = RC_lowpass(U_decode, args.phase_distortion)
 
                     U_decode = U_decode[signal_start:signal_stop]
 
                     # lowpass to cutoff freq
                     U_decode = fft(U_decode, n=len(U_decode))
-                    U_decode *= [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                    U_decode *= [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]
                     U_decode = ifft(U_decode, n=len(U_decode))
 
-                    # normalize
-                    U_decode -= U_decode.min()
-                    U_decode /= (U_decode.max() - U_decode.min())
-                    U_decode -= np.average(U_decode)
-                    U_decode *= 2 * args.saturation * saturation_correction
-                    U_buffer[1] = U_decode
+                    # determine phase shift by QAM demodulating
+                    U_phase = QAM_phase(U_decode, buffer_size)
+
+                    # generate a new sine using this phase offset
+                    U_decode = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) - U_phase +
+                        np.radians(antiemphasis_column_chroma - args.hue)
+                    ) * args.saturation * saturation_correction
 
                     # ditto for V decoder, but shift phase by 90 degrees
                     V_decode = ppu.encode_buffer(buffer_size, args.ppu, 0, 4, (6+colorburst_phase+3)%12, 0, args.sinusoidal_peak_generation)
 
                     V_decode = np.tile(V_decode, repeat_cycle)
-                    V_decode = differential_phase(V_decode, args.phase_distortion)
+                    V_decode = RC_lowpass(V_decode, args.phase_distortion)
 
                     V_decode = V_decode[signal_start:signal_stop]
 
                     V_decode = fft(V_decode, n=len(V_decode))
-                    V_decode *= [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                    V_decode *= [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]
                     V_decode = ifft(V_decode, n=len(V_decode))
 
-                    V_decode -= V_decode.min()
-                    V_decode /= (V_decode.max() - V_decode.min())
-                    V_decode -= np.average(V_decode)
-                    V_decode *= 2 * args.saturation * saturation_correction
+                    V_phase = QAM_phase(V_decode, buffer_size)
+                    V_decode = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) - V_phase +
+                        np.radians(antiemphasis_column_chroma - args.hue)
+                    ) * args.saturation * saturation_correction
+                    U_buffer[1] = U_decode
                     V_buffer[1] = V_decode
 
 

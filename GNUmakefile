@@ -26,6 +26,7 @@ example_palettes: ${examples_dir}\
 	${examples_dir}/2C02_default.pal\
 	${examples_dir}/savtool_replica.pal\
 	${examples_dir}/2C02-2C07_aps_ela_persune_neutral.pal\
+	${examples_dir}/2C02E_phd.pal\
 	${examples_dir}/2C02G_aps_ela_NTSC_persune_tink.pal\
 	${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M_J.pal\
 	${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M.pal\
@@ -83,6 +84,13 @@ ${examples_dir}/2C07_phs_aps_ela_PAL.pal:
 # RGB with DeMarsh primaries
 ${examples_dir}/2C03_DeMarsh_1980s_RGB.pal:
 	${PY} pally.py --skip-plot -ppu "2C03" -e -rpr 0.622 0.338 -rpg 0.343 0.590 -rpb 0.153 0.059 -rpw 0.28314501 0.29711289 -o $@
+
+# 2C02 with true differential phase distortion example
+# $18 = -5 degrees from colorburst
+# based on this chart
+# https://forums.nesdev.org/viewtopic.php?p=187236#p187236
+${examples_dir}/2C02E_phd.pal:
+	${PY} pally.py --skip-plot -e -phd 1 -hue -10 -o $@
 
 # NESDev wiki palettes
 

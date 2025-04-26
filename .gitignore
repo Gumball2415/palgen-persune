@@ -15,5 +15,9 @@
 /__pycache__
 /palgen_env
 
-#vs code
+# vscode
 /.vscode
+
+# etc
+
+/docs/demo_screenshots/*

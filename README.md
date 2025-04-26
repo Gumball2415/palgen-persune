@@ -119,8 +119,11 @@ options:
                         default = 0.0
   -phd PHASE_DISTORTION, --phase-distortion PHASE_DISTORTION
                         amount of voltage-dependent impedance for RC lowpass,
-                        where C=1e-8 and R= phd * (1 - level/composite_white).
-                        this may desaturate the resulting color. default = 0.0
+                        where RC = "amount * (1 - level/composite_white) *
+                        3e-8". this will also desaturate and hue shift the
+                        resulting colors nonlinearly. a value of 1 roughly
+                        corresponds to a -5 degree delta per luma row. default
+                        = 0.0
   -aps ANTIEMPHASIS_PHASE_SKEW, --antiemphasis-phase-skew ANTIEMPHASIS_PHASE_SKEW
                         additonal hue shift on colors $x2/$x6/$xA for
                         composite PPUs, in degrees, default = 0.0
@@ -177,7 +180,7 @@ options:
                         set custom display whitepoint, in CIE xy chromaticity
                         coordinates
 
-version 0.20.0
+version 0.21.0
 ```
 
 ## License
