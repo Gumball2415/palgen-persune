@@ -99,25 +99,23 @@ def encode_composite_sample(
         )
     else: attenuate = 0
 
-    # generate sinusoidal waveforms with matching p-p amplitudes
-    if (sinusoidal_peak_generation):
-        wave_amp = (signal_table_composite[luma, 0, attenuate] - signal_table_composite[luma, 1, attenuate]) / 2
-
-        # rows $x0 and $xD
-        luma_offset = (signal_table_composite[luma, 1, attenuate] + signal_table_composite[luma, 0, attenuate]) / 2
-        if (hue == 0x00):
-            wave_amp = 0
-            luma_offset = signal_table_composite[luma, 0, attenuate]
-        
-        if (hue >= 0x0D):
-            wave_amp = 0
-            luma_offset = signal_table_composite[luma, 1, attenuate]
-
-        return luma_offset + (np.sin((2 * np.pi * (hue+0.5)/12) + (2 * np.pi / 12 * (wave_phase))) * wave_amp)
-
     #columns $xE-$xF
     if (hue >= 0xE):
         luma = 0x1
+
+    # generate sinusoidal waveforms with matching p-p amplitudes
+    if (sinusoidal_peak_generation):
+        # rows $x0 and $xD
+        if (hue == 0x00):
+            return signal_table_composite[luma, 0, attenuate]
+        
+        if (hue >= 0x0D):
+            return signal_table_composite[luma, 1, attenuate]
+
+        wave_amp = (signal_table_composite[luma, 0, attenuate] - signal_table_composite[luma, 1, attenuate]) / 2
+        wave_dc = (signal_table_composite[luma, 0, attenuate] + signal_table_composite[luma, 1, attenuate]) / 2
+
+        return wave_dc + (np.sin((2 * np.pi * (hue+0.5)/12) + (2 * np.pi / 12 * (wave_phase))) * wave_amp)
 
     # 0 = waveform high; 1 = waveform low
     n_wave_level = int(not in_color_phase(hue, wave_phase))

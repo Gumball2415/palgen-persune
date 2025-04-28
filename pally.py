@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.21.0"
+VERSION = "0.22.0"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -211,7 +211,7 @@ def parse_argv(argv):
         "-phd",
         "--phase-distortion",
         type = np.float64,
-        help = "amount of voltage-dependent impedance for RC lowpass, where RC = \"amount * (1 - level/composite_white) *  3e-8\". this will also desaturate and hue shift the resulting colors nonlinearly. a value of 1 roughly corresponds to a -5 degree delta per luma row. default = 0.0",
+        help = "amount of voltage-dependent impedance for RC lowpass, where RC = \"amount * (level/composite_white) * 1e-8\". this will also desaturate and hue shift the resulting colors nonlinearly. a value of 4 very roughly corresponds to a 5 degree delta per luma row. default = 0.0",
         default = 0.0)
     parser.add_argument(
         "-aps",
@@ -553,36 +553,42 @@ def composite_QAM_plot(voltage_buffer,
     axY.set_title("Y decoding")
     axY.set_ylabel("IRE")
     axY.axis([0, buffer_size, -50, range_axis])
-    axY.plot(x, voltage_buffer[0], 'o-', linewidth=0.7, label='composite signal')
     if (args.delay_line_filter):
-        axY.plot(x, voltage_buffer[1], 'o-', linewidth=0.7, label='composite signal delay')
+        axY.plot(x, voltage_buffer[1], 'o-', linewidth=0.7, label='composite signal')
+        axY.plot(x, voltage_buffer[0], 'o-', linewidth=0.7, label='composite signal delay')
+    else:
+        axY.plot(x, voltage_buffer[0], 'o-', linewidth=0.7, label='composite signal')
     axY.plot(x, np.full((buffer_size), Y_avg), 'o-', linewidth=0.7, label='Y value = {:< z.3f}'.format(Y_avg))
     axY.legend(loc='lower right')
 
     axU.set_title("U decoding")
     axU.set_ylabel("IRE")
     axU.axis([0, buffer_size, -range_axis, range_axis])
-    axU.plot(x, U_comb, 'o-', linewidth=0.7, label='raw U signal')
+    if (args.delay_line_filter):
+        axU.plot(x, U_comb, 'o-', linewidth=0.7, label='comb filtered signal')
     axU.plot(x, U_decode * 140 / 2, 'o-', linewidth=0.7, label='U subcarrier')
-    axU.plot(x, U_buffer, 'o-', linewidth=0.7, label='demodulated U signal')
+    axU.plot(x, U_buffer, 'o-', linewidth=0.7, label='signal * U subcarrier')
     axU.plot(x, np.full((buffer_size), U_avg), 'o-', linewidth=0.7, label='U value = {:< z.3f}'.format(U_avg))
     axU.legend(loc='lower right')
 
     axV.set_title("V decoding")
     axV.set_ylabel("IRE")
     axV.axis([0, buffer_size, -range_axis, range_axis])
-    axV.plot(x, V_comb, 'o-', linewidth=0.7, label='raw V signal')
+    if (args.delay_line_filter):
+        axV.plot(x, V_comb, 'o-', linewidth=0.7, label='comb filtered signal')
     axV.plot(x, V_decode * 140 / 2, 'o-', linewidth=0.7, label='V subcarrier')
-    axV.plot(x, V_buffer, 'o-', linewidth=0.7, label='demodulated V signal')
+    axV.plot(x, V_buffer, 'o-', linewidth=0.7, label='signal * V subcarrier')
     axV.plot(x, np.full((buffer_size), V_avg), 'o-', linewidth=0.7, label='V value = {:< z.3f}'.format(V_avg))
     axV.legend(loc='lower right')
 
-    color_theta = np.arctan2(V_avg, U_avg)
+    color_theta = np.arctan2(V_avg, U_avg) + 2*np.pi
+    if color_theta >= 2*np.pi: color_theta -= 2*np.pi
     color_r =  np.sqrt(U_avg**2 + V_avg**2)
     ax1.axis([0, 2*np.pi, 0, 60])
     ax1.set_title("UV Phasor plot")
-    ax1.scatter(color_theta, color_r)
-    ax1.vlines(color_theta, 0, color_r)
+    ax1.scatter(color_theta, color_r, label='Hue phase = {:< z.3f}'.format(np.rad2deg(color_theta)))
+    ax1.vlines(color_theta, 0, color_r, label='Hue saturation = {:< z.3f}'.format(color_r))
+    ax1.legend()
 
     fig.set_size_inches(16, 9)
     if args.render_img is not None and args.output is not None:
@@ -652,17 +658,25 @@ def normalize_RGB(RGB_buffer, args=None):
 
 def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal_white_point=None):
     colorburst_phase = 0
+    colorburst_offset = 0
     next_line_shift = 0
     if (args.ppu == "2C07"):
         # $x7 == -U - 45 degrees
         # will flip to -U + 45 in pal_phase()
-        colorburst_phase = 7 #+ 0.5
+        colorburst_phase = 7
+        colorburst_offset = 2
         next_line_shift = 2
     else:
         # $x8 = -U
         colorburst_phase = 8
+        colorburst_offset = 1.5
         next_line_shift = 4
-
+    
+    # on regular NTSC composite, a single delay line filter is enough to cancel
+    # the chroma due to the phase being exactly 180 degrees offset on the next
+    # line. but since this is NES, the 120 degree offset causes the colors to
+    # shift by -30 degrees, and losing a bit of saturation.
+    if args.delay_line_filter: colorburst_phase -= 1
     colorburst_factor = 6
     colorgen_x_factor = 2
     buffer_size = int(colorburst_factor * colorgen_x_factor)
@@ -695,13 +709,16 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     # CCCCCC------
 
     voltage_buffer = np.empty((2, buffer_size), np.float64)
+
     # buffer, decode, and comb buffers for plotting
     U_buffer = np.empty((3, buffer_size), np.float64)
     V_buffer = np.empty((3, buffer_size), np.float64)
-    t = np.arange(buffer_size)
+
+    # timepoints for generating the subcarrier reference sines
+    t = np.arange(buffer_size) - colorburst_offset - colorburst_phase
 
     def decode_composite(voltage_buffer, U_buffer, V_buffer):
-        YUV = np.zeros((3), np.float64)
+        YUV = np.empty((3), np.float64)
 
         # bandpass UV component
         # no comb filter, bandpass only first line
@@ -724,9 +741,9 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     def decode_composite_dline(voltage_buffer, U_buffer, V_buffer):
         YUV = np.zeros((3), np.float64)
 
-        # bandpass UV components
+        # bandpass UV components, if PAL
         voltage_bandpass = voltage_buffer.copy()
-        voltage_bandpass -= np.average(voltage_bandpass, keepdims=True)
+        if (args.ppu == "2C07"): voltage_bandpass -= np.average(voltage_bandpass, keepdims=True)
         # bandpass and combine lines in specific way to retrieve U and V
         # based on Single Delay Line PAL Y/C Separator
         # Jack, K. (2007). NTSC and PAL digital encoding and decoding. In Video
@@ -734,16 +751,13 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
         # https://archive.org/details/video-demystified-5th-edition/
 
         # naive 1D comb chroma bandpass
-        # on regular NTSC composite, this is enough to cancel the chroma due to
-        # the phase being exactly 180 degrees offset on the next line.
-        # but since this is NES, the 120 degree offset causes the colors to
-        # shift by -15 degrees, and losing a bit of saturation.
-        U_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
         V_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
 
         if (args.ppu == "2C07"):
             # invert combination to retrieve U
             U_buffer[2] = (voltage_bandpass[0] + voltage_bandpass[1]) / 2
+        else:
+            U_buffer[2] = (voltage_bandpass[0] - voltage_bandpass[1]) / 2
 
         # apply hue and saturation in decode wave
 
@@ -765,14 +779,25 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     PPU_Fs = X_main * colorgen_x_factor
     PPU_Cb = X_main / colorburst_factor
 
+    # repeat signal n times to avoid edge fringes when filtering
+    repeat_cycle = 10
+    signal_start = 0
+    # truncate signal at the end
+    if args.phase_skew != 0:
+        signal_start = int(buffer_size*(repeat_cycle/2))
+    else:
+        signal_start = int(buffer_size*repeat_cycle-buffer_size)
+    signal_stop =  signal_start + buffer_size
+
     # phase shift the composite signal
     # https://dsp.stackexchange.com/a/95728
     from numpy.fft import fft, ifft, fftfreq
     def phase_shift(signal, angle):
-        n = fftfreq(len(signal), 1/PPU_Fs)
-        signal = fft(signal, n=len(signal))
+        buf_size = len(signal)
+        n = fftfreq(buf_size, 1/PPU_Fs)
+        signal = fft(signal, n=buf_size)
         signal *= np.exp(-1j * np.deg2rad(angle)/PPU_Cb * n)
-        signal = ifft(signal, n=len(signal))
+        signal = ifft(signal, n=buf_size)
         return signal
 
     # phase shift the composite using a simple lowpass
@@ -785,22 +810,21 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
         for i in range(len(signal)):
             # impedance changes depending on DAC tap
             # we approximate this by using the raw signal's voltage
-            # the ratio is inverted because the phase shifts negative on higher levels
             # https://forums.nesdev.org/viewtopic.php?p=287241#p287241
-            v_prev_norm = 1 - (signal[i] / composite_white)
+            # the phase shifts positive on higher levels according to https://forums.nesdev.org/viewtopic.php?p=186297#p186297
+            v_prev_norm = signal[i] / composite_white
 
-            # RC constant tuned so that 0x and 3x colors have around 15 degree delta when phd = 1
+            # RC constant tuned so that 0x and 3x colors have around 14 degree delta when phd = 3
             # https://forums.nesdev.org/viewtopic.php?p=186297#p186297
-            alpha = dt / (v_prev_norm * amount * 3e-8 + dt)
-            v_in = signal[i]
-            v_prev = alpha * v_in + (1-alpha) * v_prev
+            alpha = dt / (v_prev_norm * amount * 1e-8 + dt)
+            v_prev = alpha * signal[i] + (1-alpha) * v_prev
             v_out[i] = v_prev
         return v_out
 
-    def QAM_phase(signal, buffer_size):
-        t = np.arange(buffer_size)
-        U = np.sin(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) )
-        V = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) )
+    def QAM_phase(signal):
+        buf_size = len(signal)
+        U = np.sin(2 * np.pi / buf_size * t)
+        V = np.cos(2 * np.pi / buf_size * t)
         signal_U = np.average(signal.real * U)
         signal_V = np.average(signal.real * V)
         return np.atan2(signal_U, signal_V)
@@ -810,7 +834,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
             for hue in range(16):
                 # used for image sequence plotting
                 sequence_counter = hue + (luma*16) + (emphasis*16*4)
-                # initialize buffers to prevent error propagation
+                # zero out buffers to prevent error propagation
                 voltage_buffer.fill(0)
                 U_buffer.fill(0)
                 V_buffer.fill(0)
@@ -841,43 +865,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 # due to the way the waveform is encoded, the hue is off by an additional 1/2 of a sample
                 # if the subcarrier moves forward in angle, the resulting hue goes backwards
                 # hue argument is therefore inverse here
-                U_buffer[1] = np.sin(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
-                    np.radians(antiemphasis_column_chroma - args.hue)
-                ) * args.saturation * saturation_correction
-
-                V_buffer[1] = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) +
-                    np.radians(antiemphasis_column_chroma - args.hue)
-                ) * args.saturation * saturation_correction
-
-                if args.phase_skew != 0:
-                    phase_skew = args.phase_skew * luma
-
-                    # repeat signal n times to avoid edge fringes
-                    repeat_cycle = 10
-                    voltage_buffer = np.tile(voltage_buffer, repeat_cycle)
-
-                    # phase shift according to phase_skew, if any
-                    voltage_buffer[0] = phase_shift(voltage_buffer[0], phase_skew)
-                    voltage_buffer[1] = phase_shift(voltage_buffer[1], phase_skew)
-
-                    # truncate signal in the middle to get a seamless cycle
-                    signal_start = int(buffer_size*(repeat_cycle/2))
-                    signal_stop =  int(buffer_size*(repeat_cycle/2)+buffer_size)
-                    voltage_buffer = voltage_buffer[:, signal_start:signal_stop]
-                elif args.phase_distortion != 0:
-                    # repeat signal n times to avoid edge fringes
-                    repeat_cycle = 10
-                    voltage_buffer = np.tile(voltage_buffer, repeat_cycle)
-
-                    # phase shift according to phase_skew, if any
-                    voltage_buffer[0] = RC_lowpass(voltage_buffer[0], args.phase_distortion)
-                    voltage_buffer[1] = RC_lowpass(voltage_buffer[1], args.phase_distortion)
-
-                    # truncate signal at the end
-                    signal_start = int(buffer_size*repeat_cycle-buffer_size)
-                    signal_stop =  signal_start + buffer_size
-                    voltage_buffer = voltage_buffer[:, signal_start:signal_stop]
-
+                if args.phase_distortion != 0:
                     # generate U and V decoder waveforms based on phase skew
                     U_decode = ppu.encode_buffer(buffer_size, args.ppu, 0, 4, (6+colorburst_phase)%12, 0, args.sinusoidal_peak_generation)
 
@@ -892,10 +880,10 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                     U_decode = ifft(U_decode, n=len(U_decode))
 
                     # determine phase shift by QAM demodulating
-                    U_phase = QAM_phase(U_decode, buffer_size)
+                    U_phase = QAM_phase(U_decode)
 
                     # generate a new sine using this phase offset
-                    U_decode = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) - U_phase +
+                    U_buffer[1] = np.cos(2 * np.pi / buffer_size * t - U_phase +
                         np.radians(antiemphasis_column_chroma - args.hue)
                     ) * args.saturation * saturation_correction
 
@@ -911,12 +899,40 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                     V_decode *= [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]
                     V_decode = ifft(V_decode, n=len(V_decode))
 
-                    V_phase = QAM_phase(V_decode, buffer_size)
-                    V_decode = np.cos(2 * np.pi / buffer_size * (t - 1 - colorburst_phase - 0.5) - V_phase +
+                    V_phase = QAM_phase(V_decode)
+                    V_buffer[1] = np.cos(2 * np.pi / buffer_size * t - V_phase +
                         np.radians(antiemphasis_column_chroma - args.hue)
                     ) * args.saturation * saturation_correction
-                    U_buffer[1] = U_decode
-                    V_buffer[1] = V_decode
+                else:
+                    U_buffer[1] = np.sin(2 * np.pi / buffer_size * t +
+                        np.radians(antiemphasis_column_chroma - args.hue)
+                    ) * args.saturation * saturation_correction
+
+                    V_buffer[1] = np.cos(2 * np.pi / buffer_size * t +
+                        np.radians(antiemphasis_column_chroma - args.hue)
+                    ) * args.saturation * saturation_correction
+
+                if args.phase_skew != 0:
+                    phase_skew = args.phase_skew * luma
+
+                    # repeat signal n times to avoid edge fringes
+                    voltage_buffer = np.tile(voltage_buffer, repeat_cycle)
+
+                    # phase shift according to phase_skew, if any
+                    voltage_buffer[0] = phase_shift(voltage_buffer[0], phase_skew)
+                    voltage_buffer[1] = phase_shift(voltage_buffer[1], phase_skew)
+
+                    # truncate signal in the middle to get a seamless cycle
+                    signal_start = int(buffer_size*(repeat_cycle/2))
+                    signal_stop =  int(buffer_size*(repeat_cycle/2)+buffer_size)
+                    voltage_buffer = voltage_buffer[:, signal_start:signal_stop]
+                elif args.phase_distortion != 0:
+                    voltage_buffer = np.tile(voltage_buffer, repeat_cycle)
+
+                    # phase shift according to phase_skew, if any
+                    voltage_buffer[0] = RC_lowpass(voltage_buffer[0], args.phase_distortion)
+                    voltage_buffer[1] = RC_lowpass(voltage_buffer[1], args.phase_distortion)
+                    voltage_buffer = voltage_buffer[:, signal_start:signal_stop]
 
 
 
@@ -943,6 +959,15 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 # visualize chroma decoding
                 if (args.debug):
                     print("${0:02X} emphasis {1:03b}".format((luma<<4 | hue), emphasis) + "\n" + str(voltage_buffer[0]))
+                    U_avg = YUV_buffer[emphasis, luma, hue, 1]
+                    V_avg = YUV_buffer[emphasis, luma, hue, 2]
+                    tau = 2*np.pi
+                    color_theta = np.arctan2(V_avg, U_avg) + tau
+                    if color_theta >= 2*np.pi: color_theta -= tau
+                    color_r =  np.sqrt(U_avg**2 + V_avg**2)
+                    delay = (color_theta/tau) * (1/PPU_Cb)
+                    print("Hue angle and saturation ${0:02X}: {1}, {2}".format((luma<<4 | hue), np.rad2deg(color_theta), color_r))
+                    print("Delay ${0:02X}: {1}".format((luma<<4 | hue), delay))
                 if (args.waveforms):
                     composite_waveform_plot(voltage_buffer[0], emphasis, luma, hue, sequence_counter, args)
                 if (args.phase_QAM):
@@ -1278,32 +1303,20 @@ def main(argv=None):
         # decoded RGB buffer
         # has to be zero'd out for the normalize function to work
         RGB_buffer = np.zeros([8,4,16,3], np.float64)
-        signal_black_point = 0
-        signal_white_point = 100
+        # signal buffer normalization
+        signal_black_point = args.black_point if args.black_point is not None else 0
+        signal_white_point = args.white_point if args.white_point is not None else 100
 
         # generate color!
         match args.ppu:
             case "2C03"|"2C04-0000"|"2C04-0001"|"2C04-0002"|"2C04-0003"|"2C04-0004"|"2C05-99":
-                # signal buffer normalization
-                if (args.black_point is not None):
-                    signal_black_point = args.black_point
-
-                if (args.white_point is not None):
-                    signal_white_point = args.white_point
-
                 # we use RGB_buffer[] as a temporary buffer for YUV
                 RGB_buffer = pixel_codec_rgb(RGB_buffer, args, signal_black_point, signal_white_point)
             case "2C02"|"2C07":
-                # signal buffer normalization
-                if (args.black_point is not None):
-                    signal_black_point = args.black_point
-
-                if (args.white_point is not None):
-                    signal_white_point = args.white_point
-                else:
+                # different whitepoint calculation
+                if (args.white_point is None):
                     signal_white_point = 140 * (composite_white - composite_black)
 
-                # we use RGB_buffer[] as a temporary buffer for YUV
                 RGB_buffer = pixel_codec_composite(RGB_buffer, args, signal_black_point, signal_white_point)
 
         # reshape buffer after encoding
@@ -1327,9 +1340,6 @@ def main(argv=None):
         RGB_buffer -= signal_black_point
         RGB_buffer /= (signal_white_point - signal_black_point)
 
-        # debug: a rough vectorscope plot
-        # NES_SMPTE_plot(RGB_buffer, 0, args, plt)
-
         # fit RGB within range of 0.0-1.0
         normalize_RGB(RGB_buffer, args)
 
@@ -1338,7 +1348,7 @@ def main(argv=None):
 
         if (not args.colorimetry_disable):
             # convert RGB to display output
-            if (args.gamma):
+            if args.gamma is not None:
                 # electro-optic transfer via gamma function
                 if (not args.electro_optic_disable):
                     RGB_buffer = colour.gamma_function(RGB_buffer, 2.2)
@@ -1362,6 +1372,9 @@ def main(argv=None):
                             t_colorspace,
                             chromatic_adaptation_transform=args.chromatic_adaptation_transform)
                         if (args.debug): print(colour.matrix_RGB_to_RGB(s_colorspace, t_colorspace))
+
+                # clip to 0.0-1.0 to ensure everything is within range
+                np.clip(RGB_buffer, 0, 1, out=RGB_buffer)
 
                 # opto-electronic transfer via gamma function
                 if (not args.opto_electronic_disable):

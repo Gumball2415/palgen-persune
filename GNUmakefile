@@ -26,7 +26,7 @@ example_palettes: ${examples_dir}\
 	${examples_dir}/2C02_default.pal\
 	${examples_dir}/savtool_replica.pal\
 	${examples_dir}/2C02-2C07_aps_ela_persune_neutral.pal\
-	${examples_dir}/2C02E_phd.pal\
+	${examples_dir}/2C02G_phd.pal\
 	${examples_dir}/2C02G_aps_ela_NTSC_persune_tink.pal\
 	${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M_J.pal\
 	${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M.pal\
@@ -59,10 +59,10 @@ ${examples_dir}/2C02G_aps_ela_NTSC_persune_tink.pal:
 	${PY} pally.py --skip-plot -e -hue 2.5 -bse -aps 5 -ela 0.01429 -cld -o $@
 
 ${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M_J.pal:
-	${PY} pally.py --skip-plot -e -hue 12 -sat 0.8 -aps 5 -ela 0.01429 -cld -phs -5 -o $@
+	${PY} pally.py --skip-plot -e -hue 12 -sat 0.8 -aps 5 -ela 0.01429 -cld -phd 3 -o $@
 
 ${examples_dir}/2C02G_aps_ela_NTSC_persune_GVUSB2_NTSC_M.pal:
-	${PY} pally.py --skip-plot -e -hue 12 -sat 0.8 -gai -6.5 -blp 6 -aps 5 -ela 0.01429 -cld -phs -5 -o $@
+	${PY} pally.py --skip-plot -e -hue 12 -sat 0.8 -gai -6.5 -blp 6 -aps 5 -ela 0.01429 -cld -phd 3 -o $@
 
 # forple's Titler palette
 ${examples_dir}/2C05-99_composite_forple.pal:
@@ -70,27 +70,27 @@ ${examples_dir}/2C05-99_composite_forple.pal:
 
 # NTSC standard
 ${examples_dir}/2C02G_phs_aps_ela_NTSC.pal:
-	${PY} pally.py --skip-plot -e -blp 7.5 -aps 5 -ela 0.01429 -phs -5.0 -o $@
+	${PY} pally.py --skip-plot -e -blp 7.5 -aps 5 -ela 0.01429 -phd 3 -o $@
 
 ${examples_dir}/2C02G_phs_aps_ela_NTSC-1953.pal:
-	${PY} pally.py --skip-plot -e -blp 7.5 -rfc "NTSC (1953)" -aps 5 -ela 0.01429 -phs -5.0 -o $@
+	${PY} pally.py --skip-plot -e -blp 7.5 -rfc "NTSC (1953)" -aps 5 -ela 0.01429 -phd 3 -o $@
 
 ${examples_dir}/2C02G_phs_aps_ela_NTSC-J.pal:
-	${PY} pally.py --skip-plot -e -rpr 0.618 0.350 -rpg 0.280 0.605 -rpb 0.152 0.063 -rpw 0.28314501 0.29711289 -aps 5 -ela 0.01429 -phs -5.0 -o $@
+	${PY} pally.py --skip-plot -e -rpr 0.618 0.350 -rpg 0.280 0.605 -rpb 0.152 0.063 -rpw 0.28314501 0.29711289 -aps 5 -ela 0.01429 -phd 3 -o $@
 # PAL standard
 ${examples_dir}/2C07_phs_aps_ela_PAL.pal:
-	${PY} pally.py --skip-plot -ppu "2C07" -e -blp 7.5 --delay-line-filter -aps 5 -ela 0.01429 -phs -5.0 -cld -o $@
+	${PY} pally.py --skip-plot -ppu "2C07" -e -blp 7.5 --delay-line-filter -aps 5 -ela 0.01429 -phd 4 -cld -o $@
 
 # RGB with DeMarsh primaries
 ${examples_dir}/2C03_DeMarsh_1980s_RGB.pal:
 	${PY} pally.py --skip-plot -ppu "2C03" -e -rpr 0.622 0.338 -rpg 0.343 0.590 -rpb 0.153 0.059 -rpw 0.28314501 0.29711289 -o $@
 
 # 2C02 with true differential phase distortion example
-# $18 = -5 degrees from colorburst
-# based on this chart
-# https://forums.nesdev.org/viewtopic.php?p=187236#p187236
-${examples_dir}/2C02E_phd.pal:
-	${PY} pally.py --skip-plot -e -phd 1 -hue -10 -o $@
+# $0x-$3x hue deviation = 13.9979287408074
+# based on measurements from this post
+# https://forums.nesdev.org/viewtopic.php?p=186297#p186297
+${examples_dir}/2C02G_phd.pal:
+	${PY} pally.py --skip-plot -e -phd 3 -o $@
 
 # NESDev wiki palettes
 
@@ -109,25 +109,25 @@ example_NESDev: ${examples_wiki_dir}\
 ${examples_wiki_dir}:
 	mkdir $@ -p
 
-# 2C02G with phase skew of -5 degrees
+# 2C02G with phase skew of approx. -5 degrees
 ${examples_wiki_dir}/2C02G_wiki_palette_page.txt:
-	${PY} pally.py --skip-plot -cld -phs -5.0 -o $@ -f ".txt MediaWiki"
+	${PY} pally.py --skip-plot -cld -phd 4 -o $@ -f ".txt MediaWiki"
 
 ${examples_wiki_dir}/2C02G_wiki.txt:
-	${PY} pally.py --skip-plot -cld -phs -5.0 -e -o $@ -f ".txt MediaWiki"
+	${PY} pally.py --skip-plot -cld -phd 4 -e -o $@ -f ".txt MediaWiki"
 
 ${examples_wiki_dir}/2C02G_wiki.pal:
-	${PY} pally.py --skip-plot -cld -phs -5.0 -e -o $@
+	${PY} pally.py --skip-plot -cld -phd 4 -e -o $@
 
 #2C07 with phase skew of -5 degrees and delay line filtering
 ${examples_wiki_dir}/2C07_wiki_palette_page.txt:
-	${PY} pally.py --skip-plot -cld -ppu "2C07" -phs -5.0 --delay-line-filter -o $@ -f ".txt MediaWiki"
+	${PY} pally.py --skip-plot -cld -ppu "2C07" -phd 4 --delay-line-filter -o $@ -f ".txt MediaWiki"
 
 ${examples_wiki_dir}/2C07_wiki.txt:
-	${PY} pally.py --skip-plot -cld -ppu "2C07" -phs -5.0 --delay-line-filter -e -o $@ -f ".txt MediaWiki"
+	${PY} pally.py --skip-plot -cld -ppu "2C07" -phd 4 --delay-line-filter -e -o $@ -f ".txt MediaWiki"
 
 ${examples_wiki_dir}/2C07_wiki.pal:
-	${PY} pally.py --skip-plot -cld -ppu "2C07" -phs -5.0 --delay-line-filter -e -o $@
+	${PY} pally.py --skip-plot -cld -ppu "2C07" -phd 4 --delay-line-filter -e -o $@
 
 #2C03
 ${examples_wiki_dir}/2C03_wiki_palette_page.txt:
@@ -151,7 +151,7 @@ diagrams: ${diagrams_dir}\
 	${diagrams_dir}/addie.png\
 	${diagrams_dir}/minae.png\
 	${diagrams_dir}/palette_preview_emphasis.gif
-	${PY} pally.py --skip-plot -p -w -r png -o ${diagrams_dir} -phd 2
+	${PY} pally.py --skip-plot -p -w -r png -o ${diagrams_dir} -phd 4
 	${PY} pally.py --skip-plot -r png -t docs/smb.bin -o ${diagrams_dir}
 	ffmpeg -framerate 2 -i "${diagrams_dir}/QAM_phase_%03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/QAM_phase.gif" -y
 	ffmpeg -framerate 2 -i "${diagrams_dir}/waveform_phase_%03d.png" -filter_complex "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${diagrams_dir}/waveform_phase.gif" -y
@@ -164,10 +164,10 @@ usage.txt:
 	${PY} pally.py -h >> $@
 
 ${diagrams_dir}/addie.png:
-	${PY} pally.py --skip-plot -e -t docs/addie.bin -o $@
+	${PY} pally.py --skip-plot -t docs/addie.bin -phd 4 -o $@
 
 ${diagrams_dir}/minae.png:
-	${PY} pally.py --skip-plot -ppu "2C03" -e -t docs/minae.bin -o $@
+	${PY} pally.py --skip-plot -ppu "2C05-99" -t docs/minae.bin -o $@
 
 ${diagrams_dir}/palette_preview_emphasis.gif:
 	${PY} pally.py --skip-plot -e -r png -o ${diagrams_dir}
