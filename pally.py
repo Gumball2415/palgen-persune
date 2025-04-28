@@ -25,7 +25,7 @@ import argparse
 import numpy as np
 import ppu_composite as ppu
 
-VERSION = "0.22.0"
+VERSION = "0.22.1"
 
 def parse_argv(argv):
     parser=argparse.ArgumentParser(
@@ -211,7 +211,7 @@ def parse_argv(argv):
         "-phd",
         "--phase-distortion",
         type = np.float64,
-        help = "amount of voltage-dependent impedance for RC lowpass, where RC = \"amount * (level/composite_white) * 1e-8\". this will also desaturate and hue shift the resulting colors nonlinearly. a value of 4 very roughly corresponds to a 5 degree delta per luma row. default = 0.0",
+        help = "amount of voltage-dependent impedance for RC lowpass, where RC = \"amount * (level/composite_white) * 1e-8\". this will also desaturate and hue shift the resulting colors nonlinearly. a value of 4 very roughly corresponds to a -5 degree delta per luma row. default = 0.0",
         default = 0.0)
     parser.add_argument(
         "-aps",
@@ -676,10 +676,15 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     # the chroma due to the phase being exactly 180 degrees offset on the next
     # line. but since this is NES, the 120 degree offset causes the colors to
     # shift by -30 degrees, and losing a bit of saturation.
-    if args.delay_line_filter: colorburst_phase -= 1
+    if args.delay_line_filter:
+        colorburst_phase -= 1
+
     colorburst_factor = 6
     colorgen_x_factor = 2
     buffer_size = int(colorburst_factor * colorgen_x_factor)
+
+    # timepoints for generating the subcarrier reference sines
+    t = np.arange(buffer_size) - colorburst_offset - colorburst_phase
 
     # 2x due to integral of sin(2*PI*x)^2
     saturation_correction = 2
@@ -714,9 +719,6 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
     U_buffer = np.empty((3, buffer_size), np.float64)
     V_buffer = np.empty((3, buffer_size), np.float64)
 
-    # timepoints for generating the subcarrier reference sines
-    t = np.arange(buffer_size) - colorburst_offset - colorburst_phase
-
     def decode_composite(voltage_buffer, U_buffer, V_buffer):
         YUV = np.empty((3), np.float64)
 
@@ -743,7 +745,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
 
         # bandpass UV components, if PAL
         voltage_bandpass = voltage_buffer.copy()
-        if (args.ppu == "2C07"): voltage_bandpass -= np.average(voltage_bandpass, keepdims=True)
+        voltage_bandpass -= np.average(voltage_bandpass, keepdims=True)
         # bandpass and combine lines in specific way to retrieve U and V
         # based on Single Delay Line PAL Y/C Separator
         # Jack, K. (2007). NTSC and PAL digital encoding and decoding. In Video
@@ -811,7 +813,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
             # impedance changes depending on DAC tap
             # we approximate this by using the raw signal's voltage
             # https://forums.nesdev.org/viewtopic.php?p=287241#p287241
-            # the phase shifts positive on higher levels according to https://forums.nesdev.org/viewtopic.php?p=186297#p186297
+            # the phase shifts negative on higher levels according to https://forums.nesdev.org/viewtopic.php?p=186297#p186297
             v_prev_norm = signal[i] / composite_white
 
             # RC constant tuned so that 0x and 3x colors have around 14 degree delta when phd = 3
@@ -867,7 +869,8 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                 # hue argument is therefore inverse here
                 if args.phase_distortion != 0:
                     # generate U and V decoder waveforms based on phase skew
-                    U_decode = ppu.encode_buffer(buffer_size, args.ppu, 0, 4, (6+colorburst_phase)%12, 0, args.sinusoidal_peak_generation)
+                    U_offset = 0.5 if args.ppu == "2C07" else 0
+                    U_decode = ppu.encode_buffer(buffer_size, args.ppu, 0, 4, ((6+colorburst_phase-1)%12)+1, 0, args.sinusoidal_peak_generation)
 
                     U_decode = np.tile(U_decode, repeat_cycle)
                     U_decode = RC_lowpass(U_decode, args.phase_distortion)
@@ -883,12 +886,12 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                     U_phase = QAM_phase(U_decode)
 
                     # generate a new sine using this phase offset
-                    U_buffer[1] = np.cos(2 * np.pi / buffer_size * t - U_phase +
+                    U_buffer[1] = np.cos(2 * np.pi / buffer_size * t - U_phase + U_offset +
                         np.radians(antiemphasis_column_chroma - args.hue)
                     ) * args.saturation * saturation_correction
 
                     # ditto for V decoder, but shift phase by 90 degrees
-                    V_decode = ppu.encode_buffer(buffer_size, args.ppu, 0, 4, (6+colorburst_phase+3)%12, 0, args.sinusoidal_peak_generation)
+                    V_decode = ppu.encode_buffer(buffer_size, args.ppu, 0, 4, ((6+colorburst_phase-1+3)%12)+1, 0, args.sinusoidal_peak_generation)
 
                     V_decode = np.tile(V_decode, repeat_cycle)
                     V_decode = RC_lowpass(V_decode, args.phase_distortion)
@@ -900,7 +903,7 @@ def pixel_codec_composite(YUV_buffer, args=None, signal_black_point=None, signal
                     V_decode = ifft(V_decode, n=len(V_decode))
 
                     V_phase = QAM_phase(V_decode)
-                    V_buffer[1] = np.cos(2 * np.pi / buffer_size * t - V_phase +
+                    V_buffer[1] = np.cos(2 * np.pi / buffer_size * t - V_phase + U_offset +
                         np.radians(antiemphasis_column_chroma - args.hue)
                     ) * args.saturation * saturation_correction
                 else:
